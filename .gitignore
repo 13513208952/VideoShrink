@@ -1,0 +1,16 @@
+# Build output
+bin/
+obj/
+.vs/
+*.user
+*.suo
+
+# Runtime data (created next to the executable)
+cache/
+records/
+settings.json
+
+# Bundled ffmpeg/ffprobe binaries are NOT tracked — see VideoShrink/tools/README.md
+# NOTE: a pattern containing a slash is anchored to this file's directory,
+#       so "tools/*.exe" would NOT match "VideoShrink/tools/ffmpeg.exe".
+**/tools/*.exe

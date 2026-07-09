@@ -1,0 +1,6 @@
+<Application x:Class="VideoShrink.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- 资源由 App.xaml.cs OnStartup 在代码中合并，避免 BAML 编译时 pack URI 解析问题 -->
+    <Application.Resources/>
+</Application>
