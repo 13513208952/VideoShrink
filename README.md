@@ -140,6 +140,21 @@ source. The default mode leaves your originals alone; **direct save mode deletes
 
 **Back up anything you cannot afford to lose, and try a copy of a few files first.**
 
+## How this was written
+
+Nearly all of the code in this repository was written by Claude, Anthropic's AI assistant, working
+from requirements, design decisions and review provided by a human author. Treat it accordingly:
+read the code before you trust it with your files, and prefer the default mode, which does not
+delete anything.
+
+That said, the behaviour is not taken on faith. The project carries a test suite of 121 assertions
+covering the container rules against measured muxer behaviour, the output-path matrix, per-stream
+audio and subtitle handling, the bitrate maths, crash recovery in each of its shapes, and the
+guard against compressing its own output twice. Several bugs described in the commit history were
+found by those tests rather than by reading the code, including an audio white-list that did not
+match what the muxers actually accept and a verifier that failed a correct output because Opus can
+only run at 48 kHz.
+
 ## Licence
 
 GPL-3.0. See [LICENSE](LICENSE) and [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
