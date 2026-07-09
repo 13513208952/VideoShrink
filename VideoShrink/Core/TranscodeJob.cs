@@ -180,6 +180,17 @@ public sealed class TranscodeJob
                               "发布成品失败: " + ex.Message, startedAt, verify.Output.RawJson);
             }
 
+            // ── 9. 登记成品指纹：下次别把它当源片再压一次 ──────────────────
+            //     覆盖模式写回源目录时成品与源片同路径，光靠源路径记状态是不够的
+            //     （记录库一丢，或递归扫描吃进输出目录，就会二次压缩）。
+            try
+            {
+                string hash = await FileHash.TryComputeAsync(destPath, ct).ConfigureAwait(false);
+                _db.AddOutput(destPath, new FileInfo(destPath).Length, hash, filePath);
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex) { Log.Warning(ex, "登记成品指纹失败: {Path}", destPath); }
+
             long saved = Math.Max(0, src.Size - outSize);
             Record(filePath, destPath, src, bp.TargetVideoBitrate, outSize, RecordStatus.Success,
                    "", startedAt, verify.Output.RawJson);

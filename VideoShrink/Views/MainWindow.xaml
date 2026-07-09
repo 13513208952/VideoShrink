@@ -211,7 +211,7 @@
                                                 Style="{StaticResource MaterialDesignOutlinedButton}"/>
                                     </StackPanel>
                                     <TextBlock Style="{StaticResource Hint}"
-                                               Text="自定义模式与「启用高级调整」是两套互斥的隐藏思路：开启自定义模式会强制展开全部高级选项，并隐藏上面那个开关。被隐藏的项按当前取值继续生效。"/>
+                                               Text="隐藏只影响显示，不影响行为。"/>
                                 </StackPanel>
                             </Border>
 
@@ -229,7 +229,7 @@
                                       Style="{StaticResource MaterialDesignOutlinedComboBox}"/>
 
                             <TextBlock Style="{StaticResource Hint}"
-                                       Text="默认「新建文件夹」：在输出位置下建 &lt;源文件夹名&gt;_shrink_output，原文件一律不动。文件夹在转换开始前创建，创建失败即终止整批。"/>
+                                       Text="新建文件夹：原文件不动。直接保存：同名文件会被覆盖。"/>
 
                             <Grid Margin="0,10,0,0" Visibility="{Binding Vis[fixed_output_path]}">
                                 <Grid.ColumnDefinitions>
@@ -304,6 +304,8 @@
 
                             <CheckBox Margin="0,10,0,0" Content="递归扫描子目录" IsChecked="{Binding Recursive}"
                                       Visibility="{Binding Vis[recursive]}" IsEnabled="{Binding Enabled[recursive]}"/>
+                            <TextBlock Style="{StaticResource Hint}" Visibility="{Binding Vis[recursive]}"
+                                       Text="递归会把此前新建的输出文件夹一起扫进来；程序会识别并询问。"/>
 
                             <!-- 编码 -->
                             <TextBlock Text="编码" Style="{StaticResource GroupHead}"/>
@@ -314,7 +316,7 @@
                                       Style="{StaticResource MaterialDesignOutlinedComboBox}"/>
 
                             <TextBlock Style="{StaticResource Hint}"
-                                       Text="H264：给普通用户的常规档，默认走 GPU 加速（独显 &gt; 核显 &gt; CPU），兼顾速度与效果；硬件编码器只能单趟 VBR，体积精度较低。X265 / SvtAv1：为压缩率而生（纯 CPU、慢），两趟 ABR 精确命中目标体积。"/>
+                                       Text="H264 常规档（默认 GPU 加速，体积精度较低）；X265 / SvtAv1 为压缩率而生（CPU、慢、体积精确）。"/>
 
                             <ComboBox Margin="0,10,0,0" ItemsSource="{Binding Av1Presets}"
                                       SelectedValue="{Binding PresetAv1}" SelectedValuePath="Value" DisplayMemberPath="Label"
@@ -355,7 +357,7 @@
                                       Style="{StaticResource MaterialDesignOutlinedComboBox}"/>
 
                             <TextBlock Style="{StaticResource Hint}"
-                                       Text="Auto：容器装得下就逐轨直拷（零损失）；装不下的那几轨才回落重编码，并在记录里标注。源音频 ≤320kbps 默认不压缩（但仍计入体积预算）。CopyOnly：绝不重编码音频，装不下即判失败，原文件不动。"/>
+                                       Text="Auto：装得下就直拷，装不下的那几轨才重编码。CopyOnly：绝不重编码，装不下即判失败。"/>
 
                             <TextBox Margin="0,10,0,0" Text="{Binding AudioReencodeBitrateK, UpdateSourceTrigger=PropertyChanged}"
                                      Visibility="{Binding Vis[audio_reencode_bitrate]}" IsEnabled="{Binding Enabled[audio_reencode_bitrate]}"
@@ -394,7 +396,7 @@
                                       Visibility="{Binding Vis[retry_failed]}" IsEnabled="{Binding Enabled[retry_failed]}"/>
 
                             <TextBlock Margin="0,24,0,0" Style="{StaticResource Hint}"
-                                       Text="安全说明：成品必须先通过 ffprobe 与源片逐项交叉比对（容器类型 / 编码 / 分辨率 / 时长 / 帧率 / 色彩标签 / 逐条音轨 / 字幕条数 / 封面 / 体积），再通过整片解码校验，才会落地。落地采用『复制到目标卷 → 校验长度 → 原子改名』，崩溃可在下次启动时恢复。文件名与扩展名逐字不变。任何一项不过即判失败，源文件原封不动，程序跳到下一个。"/>
+                                       Text="成品须通过 ffprobe 交叉比对与整片解码校验才会落地；任何一项不过即判失败，源文件不动。详见 README。"/>
                         </StackPanel>
                     </ScrollViewer>
                 </TabItem>

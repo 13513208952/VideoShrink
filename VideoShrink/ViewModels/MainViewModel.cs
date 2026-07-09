@@ -36,6 +36,8 @@ public sealed class MainViewModel : ViewModelBase
     public Func<string?>? AskOutputDir { get; set; }
     /// <summary>预检风险弹窗。返回 true = 用户确认继续。</summary>
     public Func<PreflightReport, bool>? ConfirmRisks { get; set; }
+    /// <summary>发现已处理成品时的三选一。默认放弃（二次压缩不可逆）。</summary>
+    public Func<ReprocessReport, ReprocessDecision>? ConfirmReprocess { get; set; }
     /// <summary>自定义模式的逐项隐藏编辑界面。返回 null 表示取消。</summary>
     public Func<IReadOnlyList<string>, IReadOnlyList<string>?>? EditVisibility { get; set; }
     /// <summary>致命错误提示。</summary>
@@ -464,6 +466,7 @@ public sealed class MainViewModel : ViewModelBase
             await Task.Run(() => _engine.StartAsync(
                 plan,
                 report => ConfirmRisks?.Invoke(report) ?? true,
+                report => ConfirmReprocess?.Invoke(report) ?? ReprocessDecision.Abort,
                 _cts.Token));
         }
         catch (OperationCanceledException) { /* 停止属正常 */ }

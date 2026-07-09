@@ -45,6 +45,14 @@ public sealed class OutputPlan
         ExcludedDir = excludedDir;
     }
 
+    /// <summary>
+    /// 该不该把 <see cref="DestDir"/> 记进「输出目录历史」。
+    ///
+    /// 覆盖模式写回源目录时 <c>DestDir == SourceDir</c>，登记它会让下一轮把
+    /// <b>源目录里的每个文件</b>都判成「位于输出目录内」。那种情形只能靠成品指纹去认。
+    /// </summary>
+    public bool ShouldTrackDestDir => !PathEquals(DestDir, SourceDir);
+
     /// <summary>成品是否会覆盖掉源文件本身（就地替换）。</summary>
     public bool IsInPlace(string srcFile) =>
         string.Equals(Path.GetFullPath(DestPathFor(srcFile)),

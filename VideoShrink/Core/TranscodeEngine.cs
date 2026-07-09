@@ -190,6 +190,7 @@ public sealed class TranscodeEngine
     public async Task StartAsync(
         OutputPlan plan,
         Func<PreflightReport, bool> confirmRisks,
+        Func<ReprocessReport, ReprocessDecision> confirmReprocess,
         CancellationToken externalCt)
     {
         if (_busy) return;
@@ -221,10 +222,44 @@ public sealed class TranscodeEngine
             };
             bool twoPass = EncoderArgs.SupportsTwoPass(videoEncoder);
 
+            // 登记本次的输出目录：即便本轮中途放弃，下次递归扫到它也要认得出来。
+            // 但 DestDir == SourceDir（覆盖回源目录）时绝不能登记，否则下一轮会把源目录里
+            // 的每个文件都判成「位于输出目录内」。那种情形只能靠成品指纹去认。
+            if (plan.ShouldTrackDestDir)
+            {
+                try { _db.AddOutputDir(plan.DestDir); }
+                catch (Exception ex) { Log.Warning(ex, "登记输出目录失败"); }
+            }
+
             await RecoverAsync(new[] { plan.SourceDir, plan.DestDir }, ct).ConfigureAwait(false);
 
             var todo = await ScanAsync(plan, ct).ConfigureAwait(false);
             if (todo.Count == 0) { Say("没有需要转换的文件。"); return; }
+
+            // ── 重复处理防护：这些候选里有没有我们自己上一轮的成品？
+            //    覆盖模式与新建文件夹模式一视同仁，两条通道同时查。
+            var reproc = await ReprocessGuard.CheckAsync(_db, todo, ct).ConfigureAwait(false);
+            if (reproc.HasAny)
+            {
+                Say($"⚠ 发现 {reproc.Hits.Count} 个候选是此前的成品" +
+                    $"（输出目录命中 {reproc.ByDir}，哈希命中 {reproc.ByHash}）");
+                var decision = confirmReprocess(reproc);
+                todo = ReprocessGuard.Apply(todo, reproc, decision);
+
+                switch (decision)
+                {
+                    case ReprocessDecision.Abort:
+                        Say("已放弃本次操作，未处理任何文件。");
+                        return;
+                    case ReprocessDecision.ExcludeProcessed:
+                        Say($"已排除 {reproc.Hits.Count} 个已处理文件，继续处理其余 {todo.Count} 个。");
+                        break;
+                    case ReprocessDecision.IncludeAll:
+                        Say("⚠ 用户选择全部包含：已处理文件将被再次压缩（画质不可逆损失）。");
+                        break;
+                }
+                if (todo.Count == 0) { Say("排除之后没有需要转换的文件。"); return; }
+            }
 
             // ── 预检：把会丢的东西、会被压的音频、过低的码率全找出来，编码前一次性告知
             var report = await PreflightReport.BuildAsync(

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Windows;
+using VideoShrink.Core;
 using VideoShrink.ViewModels;
 using MessageBox = System.Windows.MessageBox;
 
@@ -19,6 +20,13 @@ public partial class MainWindow : Window
             var dlg = new PreflightDialog(report) { Owner = this };
             dlg.ShowDialog();
             return dlg.Confirmed;
+        });
+
+        vm.ConfirmReprocess = report => Dispatcher.Invoke(() =>
+        {
+            var dlg = new ReprocessDialog(report) { Owner = this };
+            dlg.ShowDialog();
+            return dlg.Decision;
         });
 
         vm.EditVisibility = hidden => Dispatcher.Invoke<IReadOnlyList<string>?>(() =>

@@ -82,6 +82,24 @@ public sealed class RecordDb : IDisposable
                 dest_path      TEXT    DEFAULT ''
             );
             CREATE INDEX IF NOT EXISTS idx_status ON records(status);
+
+            -- 我们自己产出过的成品。用于回答「这个文件是不是上一轮的输出？」
+            -- (file_name,size) 是廉价预筛索引；只有它命中了才去算 hash。
+            CREATE TABLE IF NOT EXISTS outputs (
+                dest_path   TEXT PRIMARY KEY,
+                file_name   TEXT    NOT NULL DEFAULT '',
+                size        INTEGER NOT NULL DEFAULT 0,
+                hash        TEXT    NOT NULL DEFAULT '',
+                source_path TEXT    DEFAULT '',
+                finished_at INTEGER DEFAULT 0
+            );
+            CREATE INDEX IF NOT EXISTS idx_out_name_size ON outputs(file_name, size);
+
+            -- 历史上用过的输出目录。递归扫描时若把它吃进来，即便哈希对不上也要示警。
+            CREATE TABLE IF NOT EXISTS output_dirs (
+                dir        TEXT PRIMARY KEY,
+                first_used INTEGER DEFAULT 0
+            );
         ");
 
         // 迁移：老库补 notes 列
@@ -218,6 +236,88 @@ public sealed class RecordDb : IDisposable
                     DestPath      = r.IsDBNull(16) ? "" : r.GetString(16),
                 });
             }
+            return list;
+        }
+    }
+
+    // ── 已处理成品 与 输出目录历史 ────────────────────────────────────
+    // 覆盖模式写回源目录时，成品与源片是同一个路径；一旦记录库丢失、或递归扫描
+    // 把上一轮的输出文件夹吃进来，程序就会把自己的成品当源片再压一次 —— 而二次压缩
+    // 的画质损失不可逆。故除了按源路径记状态，还要单独登记「我们产出过什么」。
+
+    public void AddOutput(string destPath, long size, string hash, string sourcePath)
+    {
+        lock (_lock)
+        {
+            using var cmd = _conn.CreateCommand();
+            cmd.CommandText = @"
+                INSERT INTO outputs(dest_path,file_name,size,hash,source_path,finished_at)
+                VALUES($d,$n,$s,$h,$src,$t)
+                ON CONFLICT(dest_path) DO UPDATE SET
+                  file_name=$n, size=$s, hash=$h, source_path=$src, finished_at=$t";
+            cmd.Parameters.AddWithValue("$d",   destPath);
+            cmd.Parameters.AddWithValue("$n",   System.IO.Path.GetFileName(destPath));
+            cmd.Parameters.AddWithValue("$s",   size);
+            cmd.Parameters.AddWithValue("$h",   hash);
+            cmd.Parameters.AddWithValue("$src", sourcePath);
+            cmd.Parameters.AddWithValue("$t",   DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+            cmd.ExecuteNonQuery();
+        }
+    }
+
+    /// <summary>廉价预筛：同名同体积的成品有哪些哈希。空 ⇒ 不必读文件算哈希。</summary>
+    public List<string> OutputHashesFor(string fileName, long size)
+    {
+        lock (_lock)
+        {
+            var list = new List<string>();
+            using var cmd = _conn.CreateCommand();
+            cmd.CommandText = "SELECT hash FROM outputs WHERE file_name=$n AND size=$s AND hash<>''";
+            cmd.Parameters.AddWithValue("$n", fileName);
+            cmd.Parameters.AddWithValue("$s", size);
+            using var r = cmd.ExecuteReader();
+            while (r.Read()) list.Add(r.GetString(0));
+            return list;
+        }
+    }
+
+    /// <summary>某个成品的源文件是谁（用于在警告里说明来历）。</summary>
+    public string? SourceOfOutput(string fileName, long size, string hash)
+    {
+        lock (_lock)
+        {
+            using var cmd = _conn.CreateCommand();
+            cmd.CommandText =
+                "SELECT source_path FROM outputs WHERE file_name=$n AND size=$s AND hash=$h LIMIT 1";
+            cmd.Parameters.AddWithValue("$n", fileName);
+            cmd.Parameters.AddWithValue("$s", size);
+            cmd.Parameters.AddWithValue("$h", hash);
+            return cmd.ExecuteScalar() as string;
+        }
+    }
+
+    public void AddOutputDir(string dir)
+    {
+        lock (_lock)
+        {
+            using var cmd = _conn.CreateCommand();
+            cmd.CommandText =
+                "INSERT INTO output_dirs(dir,first_used) VALUES($d,$t) ON CONFLICT(dir) DO NOTHING";
+            cmd.Parameters.AddWithValue("$d", dir);
+            cmd.Parameters.AddWithValue("$t", DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+            cmd.ExecuteNonQuery();
+        }
+    }
+
+    public List<string> GetOutputDirs()
+    {
+        lock (_lock)
+        {
+            var list = new List<string>();
+            using var cmd = _conn.CreateCommand();
+            cmd.CommandText = "SELECT dir FROM output_dirs";
+            using var r = cmd.ExecuteReader();
+            while (r.Read()) list.Add(r.GetString(0));
             return list;
         }
     }

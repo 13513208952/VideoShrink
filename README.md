@@ -56,6 +56,37 @@ The new folder is created **before** any encoding starts; if it cannot be create
 immediately and not a single file is processed. In direct-save mode, a same-named file at the
 destination is overwritten **without being verified first** — you are accepting that.
 
+Scanning is **top-level only by default**. Recursion is what lets a second run walk into an output
+folder created by an earlier one, so it is opt-in.
+
+### It will not compress its own output twice
+
+Re-compressing an already-compressed file is an irreversible quality loss, and the obvious guard —
+"remember which source paths we processed" — breaks in exactly the cases that matter:
+
+- **Direct save into the source directory** puts the result at the *same path* as its input. Lose the
+  ledger and the next run compresses it again, in place.
+- **Recursive scanning** walks into the `_shrink_output` folder from an earlier run. Those files were
+  never processed *as sources*, so nothing in the ledger mentions them.
+- Move or rename an output and any path-based bookkeeping is void.
+
+So VideoShrink checks two independent channels, in both save modes:
+
+1. **Output-directory history** — every output folder it has ever written to is remembered. Anything
+   found inside one is flagged without even opening the file.
+2. **Output fingerprints** — each result is recorded with its name, size and an XxHash64 digest. A
+   matching *name and size* is only a suspicion; the hash is what confirms the file really is the
+   output we wrote and not something you put there afterwards. Nothing is read unless the name and
+   size already collide, so an ordinary scan touches no file contents at all.
+
+If anything is flagged, you are shown what and why, and you choose: **abort** (the default and the
+recommendation), **exclude the already-processed files**, or **include everything and compress them
+again**.
+
+Both channels live in the ledger at `records/transcode.db`, next to the executable rather than in
+your media folder. Deleting it is the intended way to clear this history if you want the guard to
+stop getting in your way.
+
 ## Encoders
 
 | | For | Rate control |
