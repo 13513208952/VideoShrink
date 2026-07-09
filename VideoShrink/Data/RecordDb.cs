@@ -240,7 +240,7 @@ public sealed class RecordDb : IDisposable
         }
     }
 
-    // ── 已处理成品 与 输出目录历史 ────────────────────────────────────
+    // -- 已处理成品 与 输出目录历史 ------------------------------------
     // 覆盖模式写回源目录时，成品与源片是同一个路径；一旦记录库丢失、或递归扫描
     // 把上一轮的输出文件夹吃进来，程序就会把自己的成品当源片再压一次 —— 而二次压缩
     // 的画质损失不可逆。故除了按源路径记状态，还要单独登记「我们产出过什么」。
@@ -265,7 +265,7 @@ public sealed class RecordDb : IDisposable
         }
     }
 
-    /// <summary>廉价预筛：同名同体积的成品有哪些哈希。空 ⇒ 不必读文件算哈希。</summary>
+    /// <summary>廉价预筛：同名同体积的成品有哪些哈希。空 => 不必读文件算哈希。</summary>
     public List<string> OutputHashesFor(string fileName, long size)
     {
         lock (_lock)

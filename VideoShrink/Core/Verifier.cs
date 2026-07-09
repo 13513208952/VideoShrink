@@ -14,7 +14,7 @@ public sealed record VerifyResult(bool Ok, string Reason, MediaInfo? Output)
 
 /// <summary>
 /// 成品验收。**所有事实一律来自 ffprobe / ffmpeg 的输出**，不依赖任何自写的容器解析。
-/// 任一项不过 ⇒ 判失败 ⇒ 源文件原封不动（新建文件夹模式下源文件本就不会被碰）。
+/// 任一项不过 => 判失败 => 源文件原封不动（新建文件夹模式下源文件本就不会被碰）。
 ///
 /// 之所以把「容器类型」与「色彩标签」也列为必检项：它们是仅有的两类
 /// <b>能悄无声息通过其余全部验收</b>的损坏 —— 时长、帧率、解码、体积全对，
@@ -107,7 +107,7 @@ public static class Verifier
 
             if (act.Action == AudioAction.Copy)
             {
-                // 直拷 ⇒ 编码、声道、采样率必须一字不差
+                // 直拷 => 编码、声道、采样率必须一字不差
                 if (!string.Equals(sa.CodecName, oa.CodecName, StringComparison.OrdinalIgnoreCase))
                     return VerifyResult.Fail(
                         $"音轨#{act.OutIndex} 编码不符（本应直拷）: {sa.CodecName} vs {oa.CodecName}", outInfo);
@@ -117,7 +117,7 @@ public static class Verifier
             }
             else
             {
-                // 重编码 ⇒ 编码必然变；采样率也可能被迫改变
+                // 重编码 => 编码必然变；采样率也可能被迫改变
                 //（libopus 只支持 48kHz，44.1kHz 源会被重采样）。这两项不该拿来判失败。
                 if (oa.SampleRate <= 0)
                     return VerifyResult.Fail($"音轨#{act.OutIndex} 采样率无效", outInfo);
@@ -175,6 +175,6 @@ public static class Verifier
     private static string Trim(string s)
     {
         s = s.Replace('\n', ' ').Replace('\r', ' ').Trim();
-        return s.Length > 300 ? s[..300] + "…" : s;
+        return s.Length > 300 ? s[..300] + "..." : s;
     }
 }

@@ -49,11 +49,11 @@ public sealed class ReprocessReport
         sb.AppendLine($"本次待处理 {TotalCandidates} 个文件，其中 {Hits.Count} 个是本程序此前产出的成品。");
         sb.AppendLine("再压一次是不可逆的画质损失。");
         sb.AppendLine();
-        if (ByDir > 0)  sb.AppendLine($"· {ByDir} 个位于历史输出目录内（多半是递归扫描把输出文件夹一起吃进来了）");
-        if (ByHash > 0) sb.AppendLine($"· {ByHash} 个同名同体积且哈希完全一致");
+        if (ByDir > 0)  sb.AppendLine($"- {ByDir} 个位于历史输出目录内（多半是递归扫描把输出文件夹一起吃进来了）");
+        if (ByHash > 0) sb.AppendLine($"- {ByHash} 个同名同体积且哈希完全一致");
         sb.AppendLine();
         foreach (var h in Hits)
-            sb.AppendLine($"■ {h.FileName}\n    {h.Detail}");
+            sb.AppendLine($"文件：{h.FileName}\n    {h.Detail}");
         return sb.ToString();
     }
 }

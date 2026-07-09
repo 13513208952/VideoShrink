@@ -61,7 +61,7 @@ public enum ResizeMode
 {
     /// <summary>等比缩放，只设目标高度，宽度自动取偶数。</summary>
     Scale,
-    /// <summary>强行拉伸到目标宽×高（高级）。</summary>
+    /// <summary>强行拉伸到目标宽x高（高级）。</summary>
     Stretch,
 }
 
@@ -75,7 +75,7 @@ public class AppConfig
     [JsonPropertyName("target_dir")]
     public string TargetDir { get; set; } = "";
 
-    // ── 输出目标：3 路径模式 × 2 保存模式 ──────────────────────────────
+    // -- 输出目标：3 路径模式 x 2 保存模式 ------------------------------
     [JsonPropertyName("output_location")]
     public OutputLocation OutputLocation { get; set; } = OutputLocation.SourceDir;
 
@@ -86,7 +86,7 @@ public class AppConfig
     [JsonPropertyName("fixed_output_path")]
     public string FixedOutputPath { get; set; } = "";
 
-    // ── 体积目标 ──────────────────────────────────────────────────────
+    // -- 体积目标 ------------------------------------------------------
     [JsonPropertyName("size_target_mode")]
     public SizeTargetMode SizeTargetMode { get; set; } = SizeTargetMode.Ratio;
 
@@ -98,7 +98,7 @@ public class AppConfig
     [JsonPropertyName("target_bytes")]
     public long TargetBytes { get; set; } = 8L * 1024 * 1024;
 
-    // ── 画面 ──────────────────────────────────────────────────────────
+    // -- 画面 ----------------------------------------------------------
     [JsonPropertyName("resize_mode")]
     public ResizeMode ResizeMode { get; set; } = ResizeMode.Scale;
 
@@ -110,7 +110,7 @@ public class AppConfig
     [JsonPropertyName("target_width")]
     public int TargetWidth { get; set; } = 1920;
 
-    // ── 筛选 ──────────────────────────────────────────────────────────
+    // -- 筛选 ----------------------------------------------------------
     /// <summary>体积起步线：只处理大于此值的文件。默认 256MB —— 更小的文件压了也省不下多少。</summary>
     [JsonPropertyName("min_size_bytes")]
     public long MinSizeBytes { get; set; } = 256L * 1024 * 1024;
@@ -126,19 +126,19 @@ public class AppConfig
     [JsonPropertyName("min_source_width")]
     public int MinSourceWidth { get; set; } = 0;
 
-    // ── 编码器 ────────────────────────────────────────────────────────
+    // -- 编码器 --------------------------------------------------------
     [JsonPropertyName("encoder")]
     public EncoderKind Encoder { get; set; } = EncoderKind.X265;
 
     /// <summary>
-    /// x265 preset（<b>仅在 Encoder = X265 时生效</b>）。字符串：veryslow…veryfast。
+    /// x265 preset（<b>仅在 Encoder = X265 时生效</b>）。字符串：veryslow...veryfast。
     /// 固定体积下更慢的 preset 只花时间、换来的全是画质。
     /// </summary>
     [JsonPropertyName("preset")]
     public string Preset { get; set; } = "slow";
 
     /// <summary>
-    /// SVT-AV1 preset（<b>仅在 Encoder = SvtAv1 时生效</b>）。数字 0–13：
+    /// SVT-AV1 preset（<b>仅在 Encoder = SvtAv1 时生效</b>）。数字 0-13：
     /// 0 最慢、压缩效率最高；13 最快、压缩效率最低。2 = 公认的质量甜点极限。
     ///
     /// 独立于 <see cref="Preset"/> 的理由：SVT-AV1 只认数字，
@@ -155,7 +155,7 @@ public class AppConfig
     [JsonPropertyName("h264_impl")]
     public H264Impl H264Impl { get; set; } = H264Impl.Auto;
 
-    // ── GPU 探测缓存（首次运行写入；GPU 变化或运行中出错则重探） ─────────
+    // -- GPU 探测缓存（首次运行写入；GPU 变化或运行中出错则重探） ---------
     /// <summary>Auto 探测出的 ffmpeg 编码器名，如 "h264_amf" / "libx264"。空 = 尚未探测。</summary>
     [JsonPropertyName("h264_resolved_encoder")]
     public string H264ResolvedEncoder { get; set; } = "";
@@ -168,7 +168,7 @@ public class AppConfig
     [JsonPropertyName("gpu_decode")]
     public bool GpuDecode { get; set; } = false;
 
-    // ── 流程 ──────────────────────────────────────────────────────────
+    // -- 流程 ----------------------------------------------------------
     [JsonPropertyName("recursive")]
     public bool Recursive { get; set; } = false;
 
@@ -178,7 +178,7 @@ public class AppConfig
     [JsonPropertyName("parallelism")]
     public int Parallelism { get; set; } = 1;
 
-    // ── 音频 / 字幕 ───────────────────────────────────────────────────
+    // -- 音频 / 字幕 ---------------------------------------------------
     /// <summary>
     /// Auto（默认）：容器容得下就直拷，容不下回落到安全编码并明确记录。
     /// CopyOnly：绝不重编码音频，容器容不下即判失败（原片不动）。
@@ -205,7 +205,7 @@ public class AppConfig
     [JsonPropertyName("full_decode_check")]
     public bool FullDecodeCheck { get; set; } = true;
 
-    // ── 验收容差 ──────────────────────────────────────────────────────
+    // -- 验收容差 ------------------------------------------------------
     /// <summary>
     /// 输出体积相对原片的可接受下界。<b>&lt;=0 表示关闭（默认）。</b>
     ///
@@ -217,7 +217,7 @@ public class AppConfig
     [JsonPropertyName("min_out_ratio")]
     public double MinOutRatio { get; set; } = 0.0;
 
-    /// <summary>比例模式下的体积上界。实际上界取 <c>max(此值, TargetRatio × 1.35)</c>，避免用户调高目标比例后全批判失败。</summary>
+    /// <summary>比例模式下的体积上界。实际上界取 <c>max(此值, TargetRatio x 1.35)</c>，避免用户调高目标比例后全批判失败。</summary>
     [JsonPropertyName("max_out_ratio")]
     public double MaxOutRatio { get; set; } = 0.25;
 
@@ -225,7 +225,7 @@ public class AppConfig
     [JsonPropertyName("absolute_over_tolerance")]
     public double AbsoluteOverTolerance { get; set; } = 0.02;
 
-    // ── 界面分层 ──────────────────────────────────────────────────────
+    // -- 界面分层 ------------------------------------------------------
     /// <summary>
     /// 用户对「启用高级调整」的真实偏好。
     /// <see cref="CustomMode"/> 会把生效值强制为 true，但不能污染这个偏好值。
@@ -249,7 +249,7 @@ public class AppConfig
     [JsonIgnore]
     public bool ShowAdvancedEffective => CustomMode || ShowAdvancedUserPref;
 
-    // ── 持久化 ────────────────────────────────────────────────────────
+    // -- 持久化 --------------------------------------------------------
     private static readonly JsonSerializerOptions _opts = new()
     {
         WriteIndented = true,

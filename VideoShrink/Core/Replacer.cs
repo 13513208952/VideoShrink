@@ -16,13 +16,13 @@ namespace VideoShrink.Core;
 /// <b>A. 目标不存在</b>（新建文件夹模式的常态）—— 后缀 <c>.publishing.tmp</c>
 ///   1. 复制到 <c>&lt;目标&gt;.publishing.tmp</c>，flush 落盘，核对长度
 ///   2. 改名为目标名
-///   崩溃恢复：目标不存在 ⇒ 这份 tmp 必然是**未完成的复制**（源文件完好无损）⇒ 直接丢弃。
+///   崩溃恢复：目标不存在 => 这份 tmp 必然是**未完成的复制**（源文件完好无损）=> 直接丢弃。
 ///
 /// <b>B. 目标已存在、将被覆盖</b>（就地替换，或直接写入模式撞到同名）—— 后缀 <c>.transcoding.tmp</c>
 ///   1. 复制到 <c>&lt;目标&gt;.transcoding.tmp</c>，flush 落盘，核对长度
 ///   2. <b>确认长度无误之后</b>才删除目标
 ///   3. 改名为目标名
-///   崩溃恢复：目标不存在而 tmp 存在 ⇒ 崩在第 2、3 步之间，tmp 必然完整 ⇒ 复验后补完改名。
+///   崩溃恢复：目标不存在而 tmp 存在 => 崩在第 2、3 步之间，tmp 必然完整 => 复验后补完改名。
 ///
 /// 这个区分不是形式主义：A 形态下「目标不存在」是**常态**，若沿用 B 的恢复逻辑，
 /// 一份复制到一半的 tmp 会被误当成完整成品改名就位。
@@ -101,9 +101,9 @@ public static class Replacer
     ///
     /// <c>.publishing.tmp</c>（目标原本不存在）：一律丢弃 —— 源文件完好，重跑即可。
     /// <c>.transcoding.tmp</c>（覆盖既有目标）：
-    ///   目标仍在 ⇒ 成品未确认落地，丢弃 tmp
-    ///   目标已无 ⇒ 崩在删除与改名之间，ffprobe 复验后补完改名
-    ///   目标已无且 tmp 不可用 ⇒ 极端异常，改名为 .corrupt 保留证据并高声报警（绝不静默删除）
+    ///   目标仍在 => 成品未确认落地，丢弃 tmp
+    ///   目标已无 => 崩在删除与改名之间，ffprobe 复验后补完改名
+    ///   目标已无且 tmp 不可用 => 极端异常，改名为 .corrupt 保留证据并高声报警（绝不静默删除）
     /// </summary>
     public static async Task<List<string>> RecoverAsync(
         FfmpegRunner runner, IEnumerable<string> dirs, bool recursive, CancellationToken ct)
@@ -153,7 +153,7 @@ public static class Replacer
                     try
                     {
                         File.Move(tmp, dest);
-                        msgs.Add($"恢复：补完中断的改名 → {Path.GetFileName(dest)}");
+                        msgs.Add($"恢复：补完中断的改名 -> {Path.GetFileName(dest)}");
                         Log.Warning("崩溃恢复：{Dest} 的改名已补完", dest);
                     }
                     catch (Exception ex) { msgs.Add($"恢复：改名 {tmp} 失败: {ex.Message}"); }
@@ -162,7 +162,7 @@ public static class Replacer
                 {
                     string bad = dest + CorruptSuffix;
                     try { File.Move(tmp, bad); } catch { }
-                    msgs.Add($"⚠ 恢复：{Path.GetFileName(dest)} 已丢失且临时成品不可用，已保留为 {Path.GetFileName(bad)}");
+                    msgs.Add($"恢复警告：{Path.GetFileName(dest)} 已丢失且临时成品不可用，已保留为 {Path.GetFileName(bad)}");
                     Log.Error("数据风险：{Dest} 缺失且 tmp 不可用，已保留为 {Bad}", dest, bad);
                 }
             }

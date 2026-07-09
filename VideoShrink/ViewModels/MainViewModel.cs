@@ -27,11 +27,11 @@ public sealed class MainViewModel : ViewModelBase
     public ObservableCollection<string>    Logs    { get; } = new();
     public ObservableCollection<RecordRow> Records { get; } = new();
 
-    // ── 界面分层：XAML 直接按 key 绑定 {Binding Vis[target_width]} ─────
+    // -- 界面分层：XAML 直接按 key 绑定 {Binding Vis[target_width]} -----
     public Dictionary<string, Visibility> Vis     { get; private set; } = new();
     public Dictionary<string, bool>       Enabled { get; private set; } = new();
 
-    // ── 弹窗由 View 注入，ViewModel 不反向依赖 Views ──────────────────
+    // -- 弹窗由 View 注入，ViewModel 不反向依赖 Views ------------------
     /// <summary>询问输出目录（AskEveryTime 模式）。返回 null 表示用户取消。</summary>
     public Func<string?>? AskOutputDir { get; set; }
     /// <summary>预检风险弹窗。返回 true = 用户确认继续。</summary>
@@ -45,7 +45,7 @@ public sealed class MainViewModel : ViewModelBase
     /// <summary>二次确认。</summary>
     public Func<string, bool>? Confirm { get; set; }
 
-    // ── 选项列表 ──────────────────────────────────────────────────────
+    // -- 选项列表 ------------------------------------------------------
     public IReadOnlyList<PresetOption<string>> X265Presets { get; } = EncoderPresets.X265;
     public IReadOnlyList<PresetOption<string>> X264Presets { get; } = EncoderPresets.X264;
     public IReadOnlyList<PresetOption<int>>    Av1Presets  { get; } = EncoderPresets.Av1;
@@ -87,7 +87,7 @@ public sealed class MainViewModel : ViewModelBase
         RefreshRecords();
     }
 
-    // ── 命令 ──────────────────────────────────────────────────────────
+    // -- 命令 ----------------------------------------------------------
     public RelayCommand BrowseCommand         { get; }
     public RelayCommand BrowseFixedCommand    { get; }
     public RelayCommand ScanCommand           { get; }
@@ -101,7 +101,7 @@ public sealed class MainViewModel : ViewModelBase
     public RelayCommand EditVisibilityCommand { get; }
     public RelayCommand ResetDefaultsCommand  { get; }
 
-    // ── 源文件夹 ──────────────────────────────────────────────────────
+    // -- 源文件夹 ------------------------------------------------------
     private string _targetDir = "";
     public string TargetDir
     {
@@ -118,7 +118,7 @@ public sealed class MainViewModel : ViewModelBase
     }
     public bool HasDir => !string.IsNullOrWhiteSpace(TargetDir) && Directory.Exists(TargetDir);
 
-    // ── 进度状态 ──────────────────────────────────────────────────────
+    // -- 进度状态 ------------------------------------------------------
     private int _queueTotal; public int QueueTotal { get => _queueTotal; private set => SetField(ref _queueTotal, value); }
     private int _completed;  public int Completed  { get => _completed;  private set => SetField(ref _completed, value); }
     private int _failed;     public int Failed     { get => _failed;     private set => SetField(ref _failed, value); }
@@ -153,7 +153,7 @@ public sealed class MainViewModel : ViewModelBase
     private string _historySaved = "0 B";
     public string HistorySaved { get => _historySaved; private set => SetField(ref _historySaved, value); }
 
-    // ── 设置：每一次修改都立即写入 settings.json ───────────────────────
+    // -- 设置：每一次修改都立即写入 settings.json -----------------------
     private void SaveAndNotify([System.Runtime.CompilerServices.CallerMemberName] string? n = null)
     {
         _cfg.Save();
@@ -295,7 +295,7 @@ public sealed class MainViewModel : ViewModelBase
     }
     public bool RetryFailed { get => _cfg.RetryFailed; set { _cfg.RetryFailed = value; SaveAndNotify(); } }
 
-    // ── 界面分层 ──────────────────────────────────────────────────────
+    // -- 界面分层 ------------------------------------------------------
     /// <summary>「启用高级调整」。自定义模式下此开关本身被隐藏（两套隐藏思路互斥）。</summary>
     public bool ShowAdvanced
     {
@@ -352,7 +352,7 @@ public sealed class MainViewModel : ViewModelBase
         OnEngineLog("已恢复默认设置");
     }
 
-    // ── 引擎事件 ──────────────────────────────────────────────────────
+    // -- 引擎事件 ------------------------------------------------------
     private void OnEngineLog(string line) => Dispatch(() =>
     {
         Logs.Add($"[{DateTime.Now:HH:mm:ss}] {line}");
@@ -387,7 +387,7 @@ public sealed class MainViewModel : ViewModelBase
         else app.Dispatcher.BeginInvoke(a);
     }
 
-    // ── 动作 ──────────────────────────────────────────────────────────
+    // -- 动作 ----------------------------------------------------------
     private static string? PickFolder(string description, string initial)
     {
         using var d = new System.Windows.Forms.FolderBrowserDialog
@@ -426,7 +426,7 @@ public sealed class MainViewModel : ViewModelBase
         {
             Log.Error(ex, "输出目录准备失败");
             ShowError?.Invoke("输出目录准备失败，已终止，未处理任何文件：\n\n" + ex.Message);
-            OnEngineLog("✗ 输出目录准备失败：" + ex.Message);
+            OnEngineLog("输出目录准备失败：" + ex.Message);
             return null;
         }
     }
@@ -435,7 +435,7 @@ public sealed class MainViewModel : ViewModelBase
     {
         try
         {
-            Status = "扫描中…";
+            Status = "扫描中...";
             var plan = BuildOutputPlan();
             if (plan is null) { Status = "就绪"; return; }
 
@@ -522,7 +522,7 @@ public sealed class MainViewModel : ViewModelBase
         catch (Exception ex) { Log.Warning(ex, "打开目录失败"); }
     }
 
-    // ── 格式化 ────────────────────────────────────────────────────────
+    // -- 格式化 --------------------------------------------------------
     public static string FormatBytes(long b)
     {
         if (b <= 0) return "0 B";

@@ -13,10 +13,10 @@ public sealed class OutputSetupException : Exception
 /// <summary>
 /// 一次运行的输出落点计划。
 ///
-/// 3 种路径模式 × 2 种保存模式 = 6 种组合：
+/// 3 种路径模式 x 2 种保存模式 = 6 种组合：
 /// <code>
 ///                 NewFolder(默认)                        DirectOverwrite
-/// SourceDir     源目录/&lt;源名&gt;_shrink_output/       写回源目录 ⇒ 就地替换原文件
+/// SourceDir     源目录/&lt;源名&gt;_shrink_output/       写回源目录 => 就地替换原文件
 /// FixedPath     指定路径/&lt;源名&gt;_shrink_output/     直接写入指定路径，同名即覆盖
 /// AskEveryTime  每次询问路径，然后同上                  每次询问路径，然后同上
 /// </code>
@@ -77,7 +77,7 @@ public sealed class OutputPlan
         if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
     }
 
-    // ── 构建 ──────────────────────────────────────────────────────────
+    // -- 构建 ----------------------------------------------------------
 
     /// <summary>
     /// 解析出「目标基准路径」。<c>AskEveryTime</c> 时调用 <paramref name="askUser"/>
@@ -145,7 +145,7 @@ public sealed class OutputPlan
         return new OutputPlan(sourceDir, destDir, cfg.SaveMode, exclude);
     }
 
-    // ── 路径工具 ──────────────────────────────────────────────────────
+    // -- 路径工具 ------------------------------------------------------
     private static bool PathEquals(string a, string b) =>
         string.Equals(Path.GetFullPath(a).TrimEnd(Path.DirectorySeparatorChar),
                       Path.GetFullPath(b).TrimEnd(Path.DirectorySeparatorChar),

@@ -23,7 +23,7 @@ public partial class App : Application
         AppPaths.CleanCache();
         Log.Information("启动：缓存已清理，AppRoot={Root}", AppPaths.AppRoot);
 
-        // ── Material Design（Google 公开设计体系）主题框架 ─────────────
+        // -- Material Design（Google 公开设计体系）主题框架 -------------
         Resources.MergedDictionaries.Add(new BundledTheme
         {
             BaseTheme      = BaseTheme.Light,

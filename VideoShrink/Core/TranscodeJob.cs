@@ -14,9 +14,9 @@ public sealed record JobOutcome(JobStatus Status, string Reason, long SavedBytes
 
 /// <summary>
 /// 单个文件的完整流水线：
-///   ffprobe → 筛选 → 容器判定 → 逐流音频/字幕计划 → 由目标体积反推码率
-///   → 编码到 cache（CPU 两趟 / GPU 单趟） → ffprobe 验收（含整片解码）
-///   → 发布到目标路径（文件名逐字不变） → 落库
+///   ffprobe -> 筛选 -> 容器判定 -> 逐流音频/字幕计划 -> 由目标体积反推码率
+///   -> 编码到 cache（CPU 两趟 / GPU 单趟） -> ffprobe 验收（含整片解码）
+///   -> 发布到目标路径（文件名逐字不变） -> 落库
 ///
 /// 任何一步失败：<b>源文件原封不动</b>，记录失败原因，返回 Failed（引擎跳到下一个）。
 /// 新建文件夹模式下源文件本就永不删除。
@@ -61,13 +61,13 @@ public sealed class TranscodeJob
         _notes.Clear();
         try
         {
-            // ── 1. 探测原片 ──────────────────────────────────────────────
+            // -- 1. 探测原片 ----------------------------------------------
             src = await Probe.RunAsync(_runner, filePath, ct).ConfigureAwait(false);
             if (src is null || !src.HasVideo)
                 return Record(filePath, destPath, null, 0, 0, RecordStatus.Failed,
                               "ffprobe 无法解析原片或没有视频流", startedAt);
 
-            // ── 2. 分辨率筛选 ────────────────────────────────────────────
+            // -- 2. 分辨率筛选 --------------------------------------------
             var v = src.Video!;
             if (_cfg.MinSourceHeight > 0 && v.Height < _cfg.MinSourceHeight)
                 return new JobOutcome(JobStatus.Skipped,
@@ -76,18 +76,18 @@ public sealed class TranscodeJob
                 return new JobOutcome(JobStatus.Skipped,
                     $"宽度 {v.Width} 未达 {_cfg.MinSourceWidth}", 0);
 
-            // ── 3. 容器：输出必须与源同扩展名 ──────────────────────────────
+            // -- 3. 容器：输出必须与源同扩展名 ------------------------------
             if (!ContainerRules.CanOutput(filePath, _cfg.Encoder, out string whyNot))
                 return new JobOutcome(JobStatus.Skipped, whyNot, 0);
             var rule = ContainerRules.For(filePath)!;
 
-            // ── 4. 码率：由目标体积反推 ───────────────────────────────────
+            // -- 4. 码率：由目标体积反推 -----------------------------------
             bool canCompressAudio = _cfg.AudioPolicy != AudioPolicy.CopyOnly;
             BitratePlan bp;
             try
             {
                 bp = BitrateCalc.Compute(src, _cfg, false, canCompressAudio);
-                // 用户在预检里确认了「强行继续」⇒ 允许压缩音频腾出视频码率预算
+                // 用户在预检里确认了「强行继续」=> 允许压缩音频腾出视频码率预算
                 if (bp.AudioCompressionWouldHelp && _cfg.AllowAudioCompressionForBudget)
                     bp = BitrateCalc.Compute(src, _cfg, true, canCompressAudio);
             }
@@ -103,7 +103,7 @@ public sealed class TranscodeJob
             if (bp.Severity != BitrateSeverity.Ok)
                 _notes.Add($"目标视频码率 {bp.TargetVideoBitrate / 1000}kbps（{bp.Bpp:F4} bpp）—— {bp.SeverityText}");
 
-            // ── 5. 逐流的音频/字幕/封面计划 ───────────────────────────────
+            // -- 5. 逐流的音频/字幕/封面计划 -------------------------------
             AudioPlan audioPlan;
             try
             {
@@ -133,11 +133,11 @@ public sealed class TranscodeJob
             Directory.CreateDirectory(jobDir);
             string outPath = Path.Combine(jobDir, EncoderArgs.OutFileName(rule));
 
-            Log.Information("开始转码 {File}: {W}x{H} {Codec} {Size:N0}B → {Enc} @ {Bps}，容器 {Ext} → {Dest}",
+            Log.Information("开始转码 {File}: {W}x{H} {Codec} {Size:N0}B -> {Enc} @ {Bps}，容器 {Ext} -> {Dest}",
                 Path.GetFileName(filePath), v.Width, v.Height, v.CodecName, src.Size,
                 _videoEncoder, bp.VideoBitrateArg, rule.Ext, destPath);
 
-            // ── 6. 编码 ─────────────────────────────────────────────────
+            // -- 6. 编码 -------------------------------------------------
             if (_twoPass)
             {
                 await _waitIfPaused().ConfigureAwait(false);
@@ -157,7 +157,7 @@ public sealed class TranscodeJob
             if (!enc.Ok || !File.Exists(outPath))
                 return EncodeFailed(filePath, destPath, src, bp, startedAt, _twoPass ? "第二趟" : "编码", enc);
 
-            // ── 7. 验收（全部依据 ffprobe / ffmpeg） ──────────────────────
+            // -- 7. 验收（全部依据 ffprobe / ffmpeg） ----------------------
             var verify = await Verifier.VerifyAsync(_runner, src, outPath, _cfg, ctx, bp.Clamped, ct)
                                        .ConfigureAwait(false);
             if (!verify.Ok)
@@ -165,7 +165,7 @@ public sealed class TranscodeJob
                               verify.Output?.Size ?? 0, RecordStatus.Failed,
                               "验收未通过: " + verify.Reason, startedAt, verify.Output?.RawJson ?? "");
 
-            // ── 8. 发布成品（文件名与扩展名逐字不变） ──────────────────────
+            // -- 8. 发布成品（文件名与扩展名逐字不变） ----------------------
             long outSize = verify.Output!.Size;
             bool overwrite = _out.SaveMode == SaveMode.DirectOverwrite;
             try
@@ -180,7 +180,7 @@ public sealed class TranscodeJob
                               "发布成品失败: " + ex.Message, startedAt, verify.Output.RawJson);
             }
 
-            // ── 9. 登记成品指纹：下次别把它当源片再压一次 ──────────────────
+            // -- 9. 登记成品指纹：下次别把它当源片再压一次 ------------------
             //     覆盖模式写回源目录时成品与源片同路径，光靠源路径记状态是不够的
             //     （记录库一丢，或递归扫描吃进输出目录，就会二次压缩）。
             try
@@ -272,6 +272,6 @@ public sealed class TranscodeJob
     {
         if (string.IsNullOrWhiteSpace(stderr)) return "(无 stderr)";
         var s = stderr.Replace('\r', ' ').Replace('\n', ' ').Trim();
-        return s.Length > 300 ? "…" + s[^300..] : s;
+        return s.Length > 300 ? "..." + s[^300..] : s;
     }
 }

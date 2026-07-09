@@ -26,7 +26,7 @@ public sealed class EngineSnapshot
 }
 
 /// <summary>
-/// 批处理引擎：扫描筛选 → 队列 → worker 执行 → 暂停/停止/增量继续。
+/// 批处理引擎：扫描筛选 -> 队列 -> worker 执行 -> 暂停/停止/增量继续。
 ///
 /// 增量的秘密：成品只有原体积 ~15%（约 300MB），天然掉到 1GB 阈值之下，
 /// 下次扫描连 ffprobe 都不用跑就被体积预筛排除。再叠加记录库双保险。
@@ -46,7 +46,7 @@ public sealed class TranscodeEngine
 
     private CancellationTokenSource? _cts;
     private TaskCompletionSource _pauseTcs = Completed();
-    /// <summary>整个「恢复→扫描→转码」过程都算忙，否则扫描阶段按钮会被重复点击。</summary>
+    /// <summary>整个「恢复->扫描->转码」过程都算忙，否则扫描阶段按钮会被重复点击。</summary>
     private volatile bool _busy;
 
     private int  _queueTotal, _completed, _failed, _skipped;
@@ -105,7 +105,7 @@ public sealed class TranscodeEngine
     private void Notify() => StateChanged?.Invoke();
     private void Say(string s) { Log.Information(s); LogLine?.Invoke(s); }
 
-    // ── 启动恢复 ──────────────────────────────────────────────────────────
+    // -- 启动恢复 ----------------------------------------------------------
     /// <summary>
     /// 处理上次崩溃留下的临时文件。必须在扫描/转码之前调用，
     /// 且<b>源目录与输出目录都要扫</b>（成品可能落在别处）。
@@ -117,7 +117,7 @@ public sealed class TranscodeEngine
         foreach (var m in msgs) Say(m);
     }
 
-    // ── 扫描 ──────────────────────────────────────────────────────────────
+    // -- 扫描 --------------------------------------------------------------
     /// <summary>
     /// 筛出待转换文件。幂等/增量的依据已从「转完就不再是 4K」改为
     /// <b>记录库 + 目标文件是否已存在</b>——因为成品可能落在别的目录，
@@ -137,7 +137,7 @@ public sealed class TranscodeEngine
             .Where(f => { try { return new FileInfo(f).Length > _cfg.MinSizeBytes; } catch { return false; } })
             .ToList();
 
-        Say($"体积预筛：{bySize.Count} 个文件 > {_cfg.MinSizeBytes / 1048576.0:F0}MB，开始 ffprobe 确认…");
+        Say($"体积预筛：{bySize.Count} 个文件 > {_cfg.MinSizeBytes / 1048576.0:F0}MB，开始 ffprobe 确认...");
 
         var todo = new List<string>();
         var runner = new FfmpegRunner();
@@ -173,7 +173,7 @@ public sealed class TranscodeEngine
             if (_cfg.EnableMinSourceWidth && _cfg.MinSourceWidth > 0 && info.Video.Width < _cfg.MinSourceWidth) continue;
 
             todo.Add(f);
-            if (probed % 50 == 0) Say($"…已探测 {probed}/{bySize.Count}，命中 {todo.Count}");
+            if (probed % 50 == 0) Say($"...已探测 {probed}/{bySize.Count}，命中 {todo.Count}");
         }
 
         if (skippedByDest > 0)      Say($"已有成品，跳过 {skippedByDest} 个（增量继续）");
@@ -182,7 +182,7 @@ public sealed class TranscodeEngine
         return todo;
     }
 
-    // ── 运行 ──────────────────────────────────────────────────────────────
+    // -- 运行 --------------------------------------------------------------
     /// <summary>
     /// 跑一整批。<paramref name="confirmRisks"/> 由界面提供：预检发现风险时弹窗，
     /// 返回 false 表示用户取消，此时<b>一个文件都不处理</b>。
@@ -212,7 +212,7 @@ public sealed class TranscodeEngine
 
         try
         {
-            // ── 编码器：H.264 要先探测出具体实现（独显 > 核显 > CPU）
+            // -- 编码器：H.264 要先探测出具体实现（独显 > 核显 > CPU）
             var probeRunner = new FfmpegRunner();
             string videoEncoder = _cfg.Encoder switch
             {
@@ -236,12 +236,12 @@ public sealed class TranscodeEngine
             var todo = await ScanAsync(plan, ct).ConfigureAwait(false);
             if (todo.Count == 0) { Say("没有需要转换的文件。"); return; }
 
-            // ── 重复处理防护：这些候选里有没有我们自己上一轮的成品？
+            // -- 重复处理防护：这些候选里有没有我们自己上一轮的成品？
             //    覆盖模式与新建文件夹模式一视同仁，两条通道同时查。
             var reproc = await ReprocessGuard.CheckAsync(_db, todo, ct).ConfigureAwait(false);
             if (reproc.HasAny)
             {
-                Say($"⚠ 发现 {reproc.Hits.Count} 个候选是此前的成品" +
+                Say($"警告：发现 {reproc.Hits.Count} 个候选是此前的成品" +
                     $"（输出目录命中 {reproc.ByDir}，哈希命中 {reproc.ByHash}）");
                 var decision = confirmReprocess(reproc);
                 todo = ReprocessGuard.Apply(todo, reproc, decision);
@@ -255,13 +255,13 @@ public sealed class TranscodeEngine
                         Say($"已排除 {reproc.Hits.Count} 个已处理文件，继续处理其余 {todo.Count} 个。");
                         break;
                     case ReprocessDecision.IncludeAll:
-                        Say("⚠ 用户选择全部包含：已处理文件将被再次压缩（画质不可逆损失）。");
+                        Say("警告：用户选择全部包含：已处理文件将被再次压缩（画质不可逆损失）。");
                         break;
                 }
                 if (todo.Count == 0) { Say("排除之后没有需要转换的文件。"); return; }
             }
 
-            // ── 预检：把会丢的东西、会被压的音频、过低的码率全找出来，编码前一次性告知
+            // -- 预检：把会丢的东西、会被压的音频、过低的码率全找出来，编码前一次性告知
             var report = await PreflightReport.BuildAsync(
                 probeRunner, _cfg, plan.SaveMode, todo, ct).ConfigureAwait(false);
 
@@ -270,7 +270,7 @@ public sealed class TranscodeEngine
                 Say("用户取消，未处理任何文件。");
                 return;
             }
-            // 用户点了「我已了解，继续」⇒ 允许为腾出视频码率预算而压缩音频
+            // 用户点了「我已了解，继续」=> 允许为腾出视频码率预算而压缩音频
             _cfg.AllowAudioCompressionForBudget = report.HasAny;
 
             foreach (var f in todo) _queue.Enqueue(f);
@@ -282,7 +282,7 @@ public sealed class TranscodeEngine
             Say($"开始转换：{_queueTotal} 个文件，并行 {par}，编码器 {videoEncoder}"
               + $"（preset {EncoderArgs.EffectivePreset(_cfg, videoEncoder)}，"
               + $"{(twoPass ? "两趟 ABR，体积精确" : "单趟 VBR，体积精度较低")}）"
-              + $"，输出 → {plan.DestDir}");
+              + $"，输出 -> {plan.DestDir}");
 
             var workers = new List<Task>();
             for (int i = 0; i < par; i++)
@@ -300,7 +300,7 @@ public sealed class TranscodeEngine
         }
         catch (H264UnavailableException ex)
         {
-            Say("✗ " + ex.Message);
+            Say("失败：" + ex.Message);
         }
         catch (OperationCanceledException)
         {
@@ -350,18 +350,18 @@ public sealed class TranscodeEngine
                     Interlocked.Increment(ref _completed);
                     Interlocked.Add(ref _savedBytes, outcome.SavedBytes);
                     lock (_etaLock) { _elapsedSum += sw.Elapsed.TotalSeconds; _elapsedCount++; }
-                    Say($"✓ {Path.GetFileName(file)} 完成，省 {outcome.SavedBytes / 1048576.0:F0}MB " +
+                    Say($"完成 {Path.GetFileName(file)}，省 {outcome.SavedBytes / 1048576.0:F0}MB " +
                         $"（耗时 {sw.Elapsed:hh\\:mm\\:ss}）");
                     break;
 
                 case JobStatus.Failed:
                     Interlocked.Increment(ref _failed);
-                    Say($"✗ {Path.GetFileName(file)} 失败：{outcome.Reason}");
+                    Say($"失败 {Path.GetFileName(file)}：{outcome.Reason}");
                     break;
 
                 case JobStatus.Skipped:
                     Interlocked.Increment(ref _skipped);
-                    Say($"– {Path.GetFileName(file)} 跳过：{outcome.Reason}");
+                    Say($"跳过 {Path.GetFileName(file)}：{outcome.Reason}");
                     break;
             }
 
@@ -370,7 +370,7 @@ public sealed class TranscodeEngine
         }
     }
 
-    // ── 暂停 / 继续 / 停止 ────────────────────────────────────────────────
+    // -- 暂停 / 继续 / 停止 ------------------------------------------------
     private Task WaitIfPausedAsync(CancellationToken ct)
     {
         var tcs = _pauseTcs;
@@ -401,7 +401,7 @@ public sealed class TranscodeEngine
     public void Stop()
     {
         if (!IsRunning) return;
-        Say("正在停止…");
+        Say("正在停止...");
         _pauseTcs.TrySetResult();               // 先放行，免得 worker 卡在暂停门上
         foreach (var r in _runners) r.KillCurrent();
         _cts?.Cancel();

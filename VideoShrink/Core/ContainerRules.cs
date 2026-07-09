@@ -150,7 +150,7 @@ public static class ContainerRules
         return true;
     }
 
-    // ── 音频：逐流 ────────────────────────────────────────────────────
+    // -- 音频：逐流 ----------------------------------------------------
 
     /// <summary>
     /// 每条音轨独立判定 copy / reencode。一条不兼容<b>不会</b>拖累其余全部重编码。
@@ -182,12 +182,12 @@ public static class ContainerRules
                 throw new NotSupportedException($"音轨#{i}（{a.Describe()}）：{why}，且策略为 CopyOnly（不允许重编码）");
 
             actions.Add(new AudioStreamAction(i, AudioAction.Reencode, rule.AudioFallback,
-                                              $"{why} → 重编码为 {rule.AudioFallback}"));
+                                              $"{why} -> 重编码为 {rule.AudioFallback}"));
         }
         return new AudioPlan(actions);
     }
 
-    // ── 字幕：逐流 ────────────────────────────────────────────────────
+    // -- 字幕：逐流 ----------------------------------------------------
 
     /// <summary>
     /// 每条字幕独立判定。容器接受则直拷；mp4/mov 下文本字幕转 mov_text；
@@ -233,7 +233,7 @@ public static class ContainerRules
         return new SubtitlePlan(actions);
     }
 
-    // ── 封面图 ────────────────────────────────────────────────────────
+    // -- 封面图 --------------------------------------------------------
 
     /// <summary>容器支持且源片有封面图时保留（此前是整条丢弃）。</summary>
     public static bool KeepCoverArt(ContainerRule rule, MediaInfo src) =>

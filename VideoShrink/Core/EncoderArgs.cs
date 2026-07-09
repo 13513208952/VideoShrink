@@ -6,7 +6,7 @@ namespace VideoShrink.Core;
 
 /// <summary>一次编码所需的全部决策，由 TranscodeJob 备齐后传进来。</summary>
 public sealed record EncodeContext(
-    string        VideoEncoder,   // ffmpeg 编码器名：libx265 / libsvtav1 / libx264 / h264_nvenc …
+    string        VideoEncoder,   // ffmpeg 编码器名：libx265 / libsvtav1 / libx264 / h264_nvenc ...
     bool          TwoPass,        // CPU 编码器走两趟 ABR；GPU 只能单趟 VBR
     ContainerRule Rule,
     AudioPlan     Audio,
@@ -19,8 +19,8 @@ public sealed record EncodeContext(
 /// 构造 ffmpeg 命令行。
 ///
 /// <b>速率控制</b>：
-/// - CPU（libx265 / libsvtav1 / libx264）→ <b>两趟 ABR</b>，精确命中目标体积。
-/// - GPU（h264_nvenc / h264_qsv / h264_amf）→ ffmpeg 的通用两趟对它们不可用，
+/// - CPU（libx265 / libsvtav1 / libx264）-> <b>两趟 ABR</b>，精确命中目标体积。
+/// - GPU（h264_nvenc / h264_qsv / h264_amf）-> ffmpeg 的通用两趟对它们不可用，
 ///   只能<b>单趟 VBR + maxrate/bufsize</b>，体积精度较低（由验收的体积上界兜底）。
 ///
 /// <b>stats 用相对文件名</b>：x265-params 以 ':' 分隔，Windows 盘符里的 ':' 会把参数劈开——
@@ -55,8 +55,8 @@ public static class EncoderArgs
         kind == EncoderKind.H264 ? "yuv420p" : "yuv420p10le";
 
     /// <summary>
-    /// SVT-AV1 的 preset 是数字（0–13），x265/x264 是字符串——来自 AppConfig 的<b>独立字段</b>。
-    /// 这里只做区间夹取，绝不会出现「解析失败 → 静默降级」。
+    /// SVT-AV1 的 preset 是数字（0-13），x265/x264 是字符串——来自 AppConfig 的<b>独立字段</b>。
+    /// 这里只做区间夹取，绝不会出现「解析失败 -> 静默降级」。
     /// </summary>
     private static string Av1Preset(AppConfig cfg) =>
         EncoderPresets.ClampAv1(cfg.PresetAv1).ToString(CultureInfo.InvariantCulture);
@@ -70,7 +70,7 @@ public static class EncoderArgs
         _           => "(硬件编码器)",
     };
 
-    // ── 滤镜链 ────────────────────────────────────────────────────────
+    // -- 滤镜链 --------------------------------------------------------
     private static string Resize(AppConfig cfg) =>
         cfg.ResizeMode == ResizeMode.Stretch
             ? $"scale={cfg.TargetWidth}:{cfg.TargetHeight}:flags=lanczos,setsar=1"
@@ -98,7 +98,7 @@ public static class EncoderArgs
         return vf;
     }
 
-    // ── 视频编码器参数 ────────────────────────────────────────────────
+    // -- 视频编码器参数 ------------------------------------------------
 
     /// <summary>
     /// H.264 各实现的质量档参数（不含码率）。
@@ -158,7 +158,7 @@ public static class EncoderArgs
         if (cfg.GpuDecode) a.AddRange(new[] { "-hwaccel", "auto" });
     }
 
-    // ── 第一趟：只为收集统计，输出丢进空设备 ────────────────────────────
+    // -- 第一趟：只为收集统计，输出丢进空设备 ----------------------------
     public static List<string> BuildPass1(string srcPath, AppConfig cfg, EncodeContext ctx)
     {
         var a = new List<string> { "-hide_banner", "-nostdin", "-y", "-nostats", "-progress", "pipe:1" };
@@ -175,7 +175,7 @@ public static class EncoderArgs
         return a;
     }
 
-    // ── 产出（两趟的第二趟，或 GPU 的单趟） ──────────────────────────────
+    // -- 产出（两趟的第二趟，或 GPU 的单趟） ------------------------------
     public static List<string> BuildOutput(string srcPath, AppConfig cfg, EncodeContext ctx)
     {
         var rule = ctx.Rule;
@@ -183,7 +183,7 @@ public static class EncoderArgs
         AddHwAccel(a, cfg);
         a.AddRange(new[] { "-i", srcPath });
 
-        // ── 流映射：正片 → 封面图 → 全部音轨 → 保留的字幕 → mkv 附件
+        // -- 流映射：正片 -> 封面图 -> 全部音轨 -> 保留的字幕 -> mkv 附件
         a.AddRange(new[] { "-map", "0:v:0" });
         if (ctx.KeepCoverArt) a.AddRange(new[] { "-map", "0:v:m:attached_pic?" });
         foreach (var s in ctx.Audio.Streams) a.AddRange(new[] { "-map", $"0:a:{s.OutIndex}" });
@@ -193,7 +193,7 @@ public static class EncoderArgs
         // 元数据与章节：不显式映射就会被丢弃，而原片可能马上要被删
         a.AddRange(new[] { "-map_metadata", "0", "-map_chapters", "0" });
 
-        // ── 正片
+        // -- 正片
         a.AddRange(new[] { "-filter:v:0", FilterChain(cfg, ctx.Color) });
         a.AddRange(new[] { "-pix_fmt:v:0", PixFmt(cfg.Encoder) });
         AddVideoCodec(a, cfg, ctx, pass: ctx.TwoPass ? 2 : 0);
@@ -201,14 +201,14 @@ public static class EncoderArgs
         if (rule.IsMp4Family && cfg.Encoder == EncoderKind.X265)
             a.AddRange(new[] { "-tag:v:0", "hvc1" });   // QuickTime/Apple 生态识别 HEVC
 
-        // ── 封面图：原样拷贝，别拿去编码
+        // -- 封面图：原样拷贝，别拿去编码
         if (ctx.KeepCoverArt)
         {
             a.AddRange(new[] { "-c:v:1", "copy" });
             a.AddRange(new[] { "-disposition:v:1", "attached_pic" });
         }
 
-        // ── 音频：逐流决策
+        // -- 音频：逐流决策
         foreach (var s in ctx.Audio.Streams)
         {
             if (s.Action == AudioAction.Copy)
@@ -222,7 +222,7 @@ public static class EncoderArgs
             }
         }
 
-        // ── 字幕：逐流决策（输出侧的序号是「保留下来的」那几条的序号）
+        // -- 字幕：逐流决策（输出侧的序号是「保留下来的」那几条的序号）
         int outSub = 0;
         foreach (var s in ctx.Subtitles.Kept)
             a.AddRange(new[] { $"-c:s:{outSub++}", s.Codec });

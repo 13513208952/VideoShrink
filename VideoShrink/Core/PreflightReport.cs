@@ -49,11 +49,11 @@ public sealed class PreflightReport
     public bool AnyCritical => Risks.Any(r => r.Severity == BitrateSeverity.Critical);
     public bool AnyFatal    => Risks.Any(r => r.FatalReason is not null);
 
-    /// <summary>有文件因音频吃满预算而画面崩坏 ⇒ 弹窗必须写明「音频将被迫压缩」。</summary>
+    /// <summary>有文件因音频吃满预算而画面崩坏 => 弹窗必须写明「音频将被迫压缩」。</summary>
     public bool AudioWillBeForciblyCompressed =>
         Risks.Any(r => r.AudioCompressionWouldHelp);
 
-    /// <summary>成品会覆盖/删除源文件 ⇒ 损失不可恢复，用强警告措辞。</summary>
+    /// <summary>成品会覆盖/删除源文件 => 损失不可恢复，用强警告措辞。</summary>
     public bool Destructive => SaveMode == SaveMode.DirectOverwrite;
 
     public int TotalLosses => Risks.Sum(r => r.Losses.Count);
@@ -80,7 +80,7 @@ public sealed class PreflightReport
 
             var risk = new FileRisk { FilePath = f };
 
-            // ── 音频
+            // -- 音频
             try
             {
                 var ap = ContainerRules.PlanAudio(rule, src.Audios, cfg.AudioPolicy);
@@ -92,20 +92,20 @@ public sealed class PreflightReport
                 risk.FatalReason = ex.Message;   // CopyOnly 撞上不兼容音频
             }
 
-            // ── 字幕
+            // -- 字幕
             var sp = ContainerRules.PlanSubtitles(rule, src.Subtitles, cfg.KeepSubtitles);
             foreach (var s in sp.Dropped)
                 risk.Losses.Add($"字幕#{s.OutIndex}（{s.Describe}）将被丢弃：{s.Reason}");
 
-            // ── 封面图 / 附加视频流
+            // -- 封面图 / 附加视频流
             if (src.ExtraVideos.Count > 0 && !ContainerRules.KeepCoverArt(rule, src))
                 risk.Losses.Add($"{src.ExtraVideos.Count} 条附加视频流（封面图等）将被丢弃：{rule.Ext} 不支持");
 
-            // ── 附件（mkv 字体）
+            // -- 附件（mkv 字体）
             if (!rule.SupportsAttachments && src.Subtitles.Any(s => s.CodecName is "ass" or "ssa"))
                 risk.Losses.Add($"ASS/SSA 字幕的字体附件将丢失：{rule.Ext} 不支持附件");
 
-            // ── 码率
+            // -- 码率
             try
             {
                 bool canCompressAudio = cfg.AudioPolicy != AudioPolicy.CopyOnly;
@@ -144,7 +144,7 @@ public sealed class PreflightReport
         var sb = new System.Text.StringBuilder();
 
         sb.AppendLine(Destructive
-            ? "⚠ 当前为「直接文件保存」模式：原文件将被永久替换，以下内容不可恢复地丢失。"
+            ? "警告：当前为「直接文件保存」模式：原文件将被永久替换，以下内容不可恢复地丢失。"
             : "当前为「新建文件夹保存」模式：原文件保留不动，但成品会缺少以下内容。");
         sb.AppendLine();
 
@@ -152,16 +152,16 @@ public sealed class PreflightReport
             sb.AppendLine("另外：目标路径下的同名文件将被直接覆盖，且不会对其做任何校验。").AppendLine();
 
         if (AudioWillBeForciblyCompressed)
-            sb.AppendLine("⚠ 有文件的音频占满了体积预算，继续将被迫压缩音频（有损）。").AppendLine();
+            sb.AppendLine("警告：有文件的音频占满了体积预算，继续将被迫压缩音频（有损）。").AppendLine();
 
         foreach (var r in Risks)
         {
-            sb.AppendLine($"■ {r.FileName}");
-            if (r.FatalReason is not null) sb.AppendLine($"    ✗ 必定失败：{r.FatalReason}");
-            foreach (var l in r.Losses)         sb.AppendLine($"    − {l}");
-            foreach (var a in r.AudioReencodes) sb.AppendLine($"    ~ {a}");
+            sb.AppendLine($"文件：{r.FileName}");
+            if (r.FatalReason is not null) sb.AppendLine($"    必定失败：{r.FatalReason}");
+            foreach (var l in r.Losses)         sb.AppendLine($"    丢弃：{l}");
+            foreach (var a in r.AudioReencodes) sb.AppendLine($"    重编码：{a}");
             if (r.Severity != BitrateSeverity.Ok)
-                sb.AppendLine($"    ! {r.BitrateNote.Replace("<b>", "").Replace("</b>", "")}");
+                sb.AppendLine($"    码率：{r.BitrateNote.Replace("<b>", "").Replace("</b>", "")}");
         }
 
         return sb.ToString();

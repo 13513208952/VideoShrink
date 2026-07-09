@@ -20,7 +20,7 @@ public sealed record BitratePlan(
     long TargetTotalBytes,
     bool AudioWillBeCompressed,     // 本计划里音频是否会被重编码来腾预算
     bool AudioCompressionWouldHelp, // 尚未压缩，但压缩能显著改善视频码率
-    bool Clamped,                   // 触发码率下限钳制 ⇒ 实际体积会超出目标
+    bool Clamped,                   // 触发码率下限钳制 => 实际体积会超出目标
     double Bpp,                     // 每像素每帧比特数
     BitrateSeverity Severity)
 {
@@ -72,13 +72,13 @@ public static class BitrateCalc
     /// 由目标体积反推视频码率。
     ///
     /// <code>
-    /// targetTotal  = Ratio ? 原字节 × ratio : TargetBytes
-    /// audioBytes   = 计划音频码率/8 × 时长      // 音频即便直拷也要计入预算
-    /// videoBytes   = targetTotal × (1 − 容器开销) − audioBytes
-    /// videoBitrate = videoBytes × 8 / 时长
+    /// targetTotal  = Ratio ? 原字节 x ratio : TargetBytes
+    /// audioBytes   = 计划音频码率/8 x 时长      // 音频即便直拷也要计入预算
+    /// videoBytes   = targetTotal x (1 - 容器开销) - audioBytes
+    /// videoBitrate = videoBytes x 8 / 时长
     /// </code>
     ///
-    /// 音频规则：源音频总码率 ≤ 320kbps ⇒ 默认直拷；超过则默认压缩。
+    /// 音频规则：源音频总码率 <= 320kbps => 默认直拷；超过则默认压缩。
     /// <paramref name="forceAudioCompression"/> 为真时（用户在预检警告里选了强行继续）
     /// 一律压缩音频，以腾出视频码率预算。
     /// <paramref name="audioCompressionAllowed"/> 为假时（AudioPolicy = CopyOnly）
@@ -124,7 +124,7 @@ public static class BitrateCalc
         double bpp = Bpp(videoBps, src.Video);
         var severity = SeverityOf(videoBps, bpp);
 
-        // 尚未压缩音频，但压缩能把视频码率抬上来 ⇒ 预检里要提示「音频将被迫压缩」
+        // 尚未压缩音频，但压缩能把视频码率抬上来 => 预检里要提示「音频将被迫压缩」
         bool wouldHelp = false;
         if (audioCompressionAllowed && !compress && severity != BitrateSeverity.Ok && audioCompressed < audioCopy)
         {
@@ -152,7 +152,7 @@ public static class BitrateCalc
             ? (long)(src.Size * Math.Max(cfg.MaxOutRatio, ValidRatio(cfg.TargetRatio) * 1.35))
             : (long)(cfg.TargetBytes * (1 + Math.Max(0, cfg.AbsoluteOverTolerance)));
 
-    // ── 内部 ──────────────────────────────────────────────────────────
+    // -- 内部 ----------------------------------------------------------
 
     private static double ValidRatio(double r) =>
         r > 0 && r < 1 ? r : throw new ArgumentOutOfRangeException(nameof(r), "目标比例须在 (0,1) 之间");

@@ -30,7 +30,7 @@ public sealed class H264UnavailableException : Exception
 /// H.264 实现的探测与选择。
 ///
 /// 优先级：<b>独立显卡 &gt; 集成显卡 &gt; CPU</b>。厂商决定用哪个 ffmpeg 编码器
-/// （NVIDIA→h264_nvenc，Intel→h264_qsv，AMD→h264_amf）。
+/// （NVIDIA->h264_nvenc，Intel->h264_qsv，AMD->h264_amf）。
 ///
 /// <b>但厂商/独显判定只用来排「先试谁」的顺序，能不能用一律以 1 帧试编码为准。</b>
 /// 这不是多此一举：ffmpeg 的编码器清单里永远有 h264_nvenc，机器上有没有 N 卡、
@@ -52,7 +52,7 @@ public static class H264Support
         "-frames:v", "1",
     };
 
-    /// <summary>H264Impl → ffmpeg 编码器名。<c>Auto</c> 无固定答案。</summary>
+    /// <summary>H264Impl -> ffmpeg 编码器名。<c>Auto</c> 无固定答案。</summary>
     public static string EncoderFor(H264Impl impl) => impl switch
     {
         H264Impl.Nvenc => "h264_nvenc",
@@ -64,7 +64,7 @@ public static class H264Support
 
     public static bool IsGpuEncoder(string ffmpegEncoder) => ffmpegEncoder != CpuEncoder;
 
-    // ── GPU 枚举 ──────────────────────────────────────────────────────
+    // -- GPU 枚举 ------------------------------------------------------
 
     /// <summary>
     /// 用 PowerShell 的 CIM 查询枚举显卡。不引入 System.Management 依赖，
@@ -163,7 +163,7 @@ public static class H264Support
         return Convert.ToHexString(hash)[..16];
     }
 
-    // ── 候选顺序：独显 > 核显 > CPU ────────────────────────────────────
+    // -- 候选顺序：独显 > 核显 > CPU ------------------------------------
     internal static List<string> CandidateEncoders(IReadOnlyList<GpuInfo> gpus)
     {
         var ordered = gpus.Where(g => g.IsDiscrete).Concat(gpus.Where(g => !g.IsDiscrete));
@@ -184,7 +184,7 @@ public static class H264Support
         return candidates;
     }
 
-    // ── 试编码 ────────────────────────────────────────────────────────
+    // -- 试编码 --------------------------------------------------------
 
     /// <summary>
     /// 1 帧试编码。<b>用的是真跑时的那组质量参数</b>——这样「该编码器是否接受这些参数」
@@ -212,7 +212,7 @@ public static class H264Support
         }
     }
 
-    // ── 解析 ──────────────────────────────────────────────────────────
+    // -- 解析 ----------------------------------------------------------
 
     /// <summary>
     /// 得出本次要用的 ffmpeg H.264 编码器名。
@@ -276,6 +276,6 @@ public static class H264Support
     private static string Trim(string s)
     {
         s = s.Replace('\n', ' ').Replace('\r', ' ').Trim();
-        return s.Length > 160 ? s[..160] + "…" : s;
+        return s.Length > 160 ? s[..160] + "..." : s;
     }
 }
