@@ -13,9 +13,13 @@ public enum JobStatus { Success, Failed, Skipped }
 public sealed record JobOutcome(JobStatus Status, string Reason, long SavedBytes);
 
 /// <summary>
-/// 单个文件的完整流水线：ffprobe → 算目标码率 → 两趟 ABR 编码到 cache
-/// → ffprobe 验收（+整片解码） → 原子替换原片 → 落库。
-/// 任何一步失败：原片原封不动，记录失败原因，返回 Failed（由引擎跳到下一个）。
+/// 单个文件的完整流水线：
+///   ffprobe → 筛选 → 容器判定 → 逐流音频/字幕计划 → 由目标体积反推码率
+///   → 编码到 cache（CPU 两趟 / GPU 单趟） → ffprobe 验收（含整片解码）
+///   → 发布到目标路径（文件名逐字不变） → 落库
+///
+/// 任何一步失败：<b>源文件原封不动</b>，记录失败原因，返回 Failed（引擎跳到下一个）。
+/// 新建文件夹模式下源文件本就永不删除。
 /// </summary>
 public sealed class TranscodeJob
 {
@@ -23,20 +27,27 @@ public sealed class TranscodeJob
     private readonly AppConfig    _cfg;
     private readonly RecordDb     _db;
     private readonly Func<Task>   _waitIfPaused;
+    private readonly OutputPlan   _out;
+    private readonly string       _videoEncoder;
+    private readonly bool         _twoPass;
 
     /// <summary>
     /// 本次文件的「有损但可接受」处理留痕（音频重编码、字幕/附加流丢弃）。
-    /// 原片马上就要被删，这些必须写进记录库，否则用户永远不会知道丢了什么。
+    /// 就地替换时原片会被删，这些必须写进记录库，否则用户永远不会知道丢了什么。
     /// 每个 worker 独占一个 TranscodeJob 且 RunAsync 串行执行，故用实例字段安全。
     /// </summary>
     private readonly List<string> _notes = new();
 
-    public TranscodeJob(FfmpegRunner runner, AppConfig cfg, RecordDb db, Func<Task> waitIfPaused)
+    public TranscodeJob(FfmpegRunner runner, AppConfig cfg, RecordDb db, Func<Task> waitIfPaused,
+                        OutputPlan outputPlan, string videoEncoder, bool twoPass)
     {
         _runner       = runner;
         _cfg          = cfg;
         _db           = db;
         _waitIfPaused = waitIfPaused;
+        _out          = outputPlan;
+        _videoEncoder = videoEncoder;
+        _twoPass      = twoPass;
     }
 
     public async Task<JobOutcome> RunAsync(
@@ -44,6 +55,7 @@ public sealed class TranscodeJob
     {
         long startedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         string jobDir  = Path.Combine(AppPaths.CacheDir, Guid.NewGuid().ToString("N")[..8]);
+        string destPath = _out.DestPathFor(filePath);
 
         MediaInfo? src = null;
         _notes.Clear();
@@ -52,113 +64,135 @@ public sealed class TranscodeJob
             // ── 1. 探测原片 ──────────────────────────────────────────────
             src = await Probe.RunAsync(_runner, filePath, ct).ConfigureAwait(false);
             if (src is null || !src.HasVideo)
-                return Record(filePath, null, 0, 0, RecordStatus.Failed,
+                return Record(filePath, destPath, null, 0, 0, RecordStatus.Failed,
                               "ffprobe 无法解析原片或没有视频流", startedAt);
 
-            // ── 2. 筛选：分辨率未达门槛视为「已转换」，跳过（天然幂等/增量） ──
-            if (src.Video!.Height < _cfg.MinSourceHeight)
+            // ── 2. 分辨率筛选 ────────────────────────────────────────────
+            var v = src.Video!;
+            if (_cfg.MinSourceHeight > 0 && v.Height < _cfg.MinSourceHeight)
                 return new JobOutcome(JobStatus.Skipped,
-                    $"分辨率 {src.Video.Width}x{src.Video.Height} 未达 {_cfg.MinSourceHeight}，跳过", 0);
+                    $"高度 {v.Height} 未达 {_cfg.MinSourceHeight}", 0);
+            if (_cfg.EnableMinSourceWidth && _cfg.MinSourceWidth > 0 && v.Width < _cfg.MinSourceWidth)
+                return new JobOutcome(JobStatus.Skipped,
+                    $"宽度 {v.Width} 未达 {_cfg.MinSourceWidth}", 0);
 
-            // ── 3. 容器：输出必须与源同扩展名（就地替换的硬约束） ──────────
+            // ── 3. 容器：输出必须与源同扩展名 ──────────────────────────────
             if (!ContainerRules.CanOutput(filePath, _cfg.Encoder, out string whyNot))
                 return new JobOutcome(JobStatus.Skipped, whyNot, 0);
             var rule = ContainerRules.For(filePath)!;
 
-            // ── 4. 音频 / 字幕计划（可能因 CopyOnly 策略而直接判失败） ──────
-            AudioPlan audioPlan;
-            try { audioPlan = ContainerRules.PlanAudio(rule, src.Audios, _cfg.AudioPolicy); }
-            catch (NotSupportedException ex)
+            // ── 4. 码率：由目标体积反推 ───────────────────────────────────
+            bool canCompressAudio = _cfg.AudioPolicy != AudioPolicy.CopyOnly;
+            BitratePlan bp;
+            try
             {
-                return Record(filePath, src, 0, 0, RecordStatus.Failed, ex.Message, startedAt);
+                bp = BitrateCalc.Compute(src, _cfg, false, canCompressAudio);
+                // 用户在预检里确认了「强行继续」⇒ 允许压缩音频腾出视频码率预算
+                if (bp.AudioCompressionWouldHelp && _cfg.AllowAudioCompressionForBudget)
+                    bp = BitrateCalc.Compute(src, _cfg, true, canCompressAudio);
             }
-            var subPlan = ContainerRules.PlanSubtitles(rule, src.Subtitles, _cfg.KeepSubtitles);
-
-            if (audioPlan.Reencoded)      _notes.Add("音频已重编码：" + audioPlan.Reason);
-            if (subPlan.DroppedCount > 0) _notes.Add(subPlan.Reason);
-            if (src.ExtraVideoStreams > 0)
-                _notes.Add($"丢弃 {src.ExtraVideoStreams} 条附加视频流（封面图等）");
-            foreach (var n in _notes) Log.Warning("{File}: {Note}", Path.GetFileName(filePath), n);
-
-            // ── 5. 目标码率 ──────────────────────────────────────────────
-            BitratePlan plan;
-            try { plan = BitrateCalc.Compute(src, _cfg.TargetRatio); }
             catch (Exception ex)
             {
-                return Record(filePath, src, 0, 0, RecordStatus.Failed,
+                return Record(filePath, destPath, src, 0, 0, RecordStatus.Failed,
                               "计算目标码率失败: " + ex.Message, startedAt);
             }
 
-            if (plan.Clamped)
-                Log.Warning("{File} 触发码率下限钳制（{Bps}），实际体积将超出 {Ratio:P0} 目标",
-                            Path.GetFileName(filePath), plan.TargetVideoBitrate, _cfg.TargetRatio);
+            if (bp.Clamped)
+                Log.Warning("{File} 触发码率下限钳制（{Bps}），实际体积将超出目标",
+                            Path.GetFileName(filePath), bp.TargetVideoBitrate);
+            if (bp.Severity != BitrateSeverity.Ok)
+                _notes.Add($"目标视频码率 {bp.TargetVideoBitrate / 1000}kbps（{bp.Bpp:F4} bpp）—— {bp.SeverityText}");
+
+            // ── 5. 逐流的音频/字幕/封面计划 ───────────────────────────────
+            AudioPlan audioPlan;
+            try
+            {
+                audioPlan = ContainerRules.PlanAudio(rule, src.Audios, _cfg.AudioPolicy,
+                                                     forceReencodeAll: bp.AudioWillBeCompressed);
+            }
+            catch (NotSupportedException ex)
+            {
+                return Record(filePath, destPath, src, 0, 0, RecordStatus.Failed, ex.Message, startedAt);
+            }
+            var subPlan   = ContainerRules.PlanSubtitles(rule, src.Subtitles, _cfg.KeepSubtitles);
+            bool keepCover = ContainerRules.KeepCoverArt(rule, src);
+
+            foreach (var a in audioPlan.Reencoded)
+                _notes.Add($"音轨#{a.OutIndex} 已重编码：{a.Reason}");
+            foreach (var s in subPlan.Dropped)
+                _notes.Add($"字幕#{s.OutIndex}（{s.Describe}）已丢弃：{s.Reason}");
+            if (src.ExtraVideos.Count > 0 && !keepCover)
+                _notes.Add($"丢弃 {src.ExtraVideos.Count} 条附加视频流（封面图等）");
+            foreach (var n in _notes) Log.Warning("{File}: {Note}", Path.GetFileName(filePath), n);
+
+            var ctx = new EncodeContext(
+                VideoEncoder: _videoEncoder, TwoPass: _twoPass, Rule: rule,
+                Audio: audioPlan, Subtitles: subPlan, KeepCoverArt: keepCover,
+                Color: v.Color, VideoBitrateArg: bp.VideoBitrateArg);
 
             Directory.CreateDirectory(jobDir);
             string outPath = Path.Combine(jobDir, EncoderArgs.OutFileName(rule));
 
-            Log.Information("开始转码 {File}: {W}x{H} {Codec} {Size:N0}B → {Th}p @ {Bps}，容器 {Ext}，{Audio}",
-                Path.GetFileName(filePath), src.Video.Width, src.Video.Height,
-                src.Video.CodecName, src.Size, _cfg.TargetHeight, plan.VideoBitrateArg,
-                rule.Ext, audioPlan.Reason);
+            Log.Information("开始转码 {File}: {W}x{H} {Codec} {Size:N0}B → {Enc} @ {Bps}，容器 {Ext} → {Dest}",
+                Path.GetFileName(filePath), v.Width, v.Height, v.CodecName, src.Size,
+                _videoEncoder, bp.VideoBitrateArg, rule.Ext, destPath);
 
-            // ── 4. 第一趟（收集统计；进度占前 50%） ───────────────────────
+            // ── 6. 编码 ─────────────────────────────────────────────────
+            if (_twoPass)
+            {
+                await _waitIfPaused().ConfigureAwait(false);
+                var p1 = await _runner.RunFfmpegWithProgressAsync(
+                    EncoderArgs.BuildPass1(filePath, _cfg, ctx), src.Duration,
+                    Scaled(fileProgress, 0.0, 0.5), ct, jobDir).ConfigureAwait(false);
+
+                if (!p1.Ok)
+                    return EncodeFailed(filePath, destPath, src, bp, startedAt, "第一趟", p1);
+            }
+
             await _waitIfPaused().ConfigureAwait(false);
-            var p1Args = EncoderArgs.BuildPass1(filePath, _cfg, plan.VideoBitrateArg);
-            var p1 = await _runner.RunFfmpegWithProgressAsync(
-                p1Args, src.Duration,
-                Scaled(fileProgress, 0.0, 0.5), ct, jobDir).ConfigureAwait(false);
+            var enc = await _runner.RunFfmpegWithProgressAsync(
+                EncoderArgs.BuildOutput(filePath, _cfg, ctx), src.Duration,
+                Scaled(fileProgress, _twoPass ? 0.5 : 0.0, 1.0), ct, jobDir).ConfigureAwait(false);
 
-            if (!p1.Ok)
-                return Record(filePath, src, plan.TargetVideoBitrate, 0, RecordStatus.Failed,
-                              $"第一趟失败 (exit={p1.ExitCode}): {Tail(p1.Stderr)}", startedAt);
+            if (!enc.Ok || !File.Exists(outPath))
+                return EncodeFailed(filePath, destPath, src, bp, startedAt, _twoPass ? "第二趟" : "编码", enc);
 
-            // ── 5. 第二趟（实际产出；进度占后 50%） ───────────────────────
-            await _waitIfPaused().ConfigureAwait(false);
-            var p2Args = EncoderArgs.BuildPass2(
-                filePath, _cfg, plan.VideoBitrateArg, rule, audioPlan, subPlan, src.Video.Color);
-            var p2 = await _runner.RunFfmpegWithProgressAsync(
-                p2Args, src.Duration,
-                Scaled(fileProgress, 0.5, 1.0), ct, jobDir).ConfigureAwait(false);
+            // ── 7. 验收（全部依据 ffprobe / ffmpeg） ──────────────────────
+            var verify = await Verifier.VerifyAsync(_runner, src, outPath, _cfg, ctx, bp.Clamped, ct)
+                                       .ConfigureAwait(false);
+            if (!verify.Ok)
+                return Record(filePath, destPath, src, bp.TargetVideoBitrate,
+                              verify.Output?.Size ?? 0, RecordStatus.Failed,
+                              "验收未通过: " + verify.Reason, startedAt, verify.Output?.RawJson ?? "");
 
-            if (!p2.Ok || !File.Exists(outPath))
-                return Record(filePath, src, plan.TargetVideoBitrate, 0, RecordStatus.Failed,
-                              $"第二趟失败 (exit={p2.ExitCode}): {Tail(p2.Stderr)}", startedAt);
-
-            // ── 6. 验收（全部依据 ffprobe / ffmpeg） ──────────────────────
-            var v = await Verifier.VerifyAsync(
-                _runner, src, outPath, _cfg, rule, audioPlan, subPlan, plan.Clamped, ct).ConfigureAwait(false);
-
-            if (!v.Ok)
-                return Record(filePath, src, plan.TargetVideoBitrate,
-                              v.Output?.Size ?? 0, RecordStatus.Failed,
-                              "验收未通过: " + v.Reason, startedAt, v.Output?.RawJson ?? "");
-
-            // ── 7. 只有全部通过，才替换原片（文件名逐字不差） ──────────────
-            long outSize = v.Output!.Size;
+            // ── 8. 发布成品（文件名与扩展名逐字不变） ──────────────────────
+            long outSize = verify.Output!.Size;
+            bool overwrite = _out.SaveMode == SaveMode.DirectOverwrite;
             try
             {
-                await Replacer.ReplaceAsync(filePath, outPath, ct).ConfigureAwait(false);
+                _out.EnsureDestSubdir(filePath);
+                await Replacer.PublishAsync(outPath, destPath, overwrite, ct).ConfigureAwait(false);
             }
             catch (OperationCanceledException) { throw; }
             catch (Exception ex)
             {
-                return Record(filePath, src, plan.TargetVideoBitrate, outSize, RecordStatus.Failed,
-                              "替换原片失败: " + ex.Message, startedAt, v.Output.RawJson);
+                return Record(filePath, destPath, src, bp.TargetVideoBitrate, outSize, RecordStatus.Failed,
+                              "发布成品失败: " + ex.Message, startedAt, verify.Output.RawJson);
             }
 
             long saved = Math.Max(0, src.Size - outSize);
-            Record(filePath, src, plan.TargetVideoBitrate, outSize, RecordStatus.Success,
-                   "", startedAt, v.Output.RawJson);
+            Record(filePath, destPath, src, bp.TargetVideoBitrate, outSize, RecordStatus.Success,
+                   "", startedAt, verify.Output.RawJson);
             return new JobOutcome(JobStatus.Success, "", saved);
         }
         catch (OperationCanceledException)
         {
-            throw;   // 停止：不落失败记录，原片未动
+            throw;   // 停止：不落失败记录，源文件未动
         }
         catch (Exception ex)
         {
             Log.Error(ex, "转码 {File} 抛异常", filePath);
-            return Record(filePath, src, 0, 0, RecordStatus.Failed, "异常: " + ex.Message, startedAt);
+            return Record(filePath, destPath, src, 0, 0, RecordStatus.Failed, "异常: " + ex.Message, startedAt);
         }
         finally
         {
@@ -166,18 +200,38 @@ public sealed class TranscodeJob
         }
     }
 
-    /// <summary>把 0..1 的子进度映射到 [lo, hi] 区间（两趟各占一半）。</summary>
+    /// <summary>编码失败。若是硬件编码器初始化出错，清掉探测缓存，下次重探。</summary>
+    private JobOutcome EncodeFailed(
+        string path, string dest, MediaInfo src, BitratePlan bp, long startedAt,
+        string stage, ProcResult r)
+    {
+        if (H264Support.IsGpuEncoder(_videoEncoder) && LooksLikeEncoderInitFailure(r.Stderr))
+            H264Support.InvalidateCache(_cfg);
+
+        return Record(path, dest, src, bp.TargetVideoBitrate, 0, RecordStatus.Failed,
+                      $"{stage}失败 (exit={r.ExitCode}): {Tail(r.Stderr)}", startedAt);
+    }
+
+    private static bool LooksLikeEncoderInitFailure(string stderr) =>
+        stderr.Contains("Cannot load", StringComparison.OrdinalIgnoreCase) ||
+        stderr.Contains("No capable devices", StringComparison.OrdinalIgnoreCase) ||
+        stderr.Contains("Error initializing", StringComparison.OrdinalIgnoreCase) ||
+        stderr.Contains("Error creating", StringComparison.OrdinalIgnoreCase) ||
+        stderr.Contains("not supported", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>把 0..1 的子进度映射到 [lo, hi] 区间。</summary>
     private static IProgress<double>? Scaled(IProgress<double>? outer, double lo, double hi)
         => outer is null ? null : new Progress<double>(p => outer.Report(lo + (hi - lo) * p));
 
     private JobOutcome Record(
-        string path, MediaInfo? src, long targetBps, long outSize,
+        string path, string dest, MediaInfo? src, long targetBps, long outSize,
         string status, string reason, long startedAt, string probeAfter = "")
     {
         var row = new RecordRow
         {
             FilePath      = path,
             FileName      = Path.GetFileName(path),
+            DestPath      = dest,
             OrigSize      = src?.Size ?? 0,
             OrigWidth     = src?.Video?.Width ?? 0,
             OrigHeight    = src?.Video?.Height ?? 0,

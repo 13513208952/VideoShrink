@@ -19,6 +19,8 @@ public sealed class RecordRow
 {
     public string FilePath      { get; set; } = "";
     public string FileName      { get; set; } = "";
+    /// <summary>成品的落点。新建文件夹模式下与源路径不同；就地替换时与源路径相同。</summary>
+    public string DestPath      { get; set; } = "";
     public long   OrigSize      { get; set; }
     public int    OrigWidth     { get; set; }
     public int    OrigHeight    { get; set; }
@@ -76,7 +78,8 @@ public sealed class RecordDb : IDisposable
                 finished_at    INTEGER DEFAULT 0,
                 probe_before   TEXT    DEFAULT '',
                 probe_after    TEXT    DEFAULT '',
-                notes          TEXT    DEFAULT ''
+                notes          TEXT    DEFAULT '',
+                dest_path      TEXT    DEFAULT ''
             );
             CREATE INDEX IF NOT EXISTS idx_status ON records(status);
         ");
@@ -89,10 +92,15 @@ public sealed class RecordDb : IDisposable
             using var r = cmd.ExecuteReader();
             while (r.Read()) cols.Add(r.GetString(1));
         }
-        if (!cols.Contains("notes"))
+        foreach (var (col, def) in new[]
         {
-            Exec("ALTER TABLE records ADD COLUMN notes TEXT DEFAULT ''");
-            Log.Information("记录库迁移：新增列 notes");
+            ("notes",     "notes     TEXT DEFAULT ''"),
+            ("dest_path", "dest_path TEXT DEFAULT ''"),
+        })
+        {
+            if (cols.Contains(col)) continue;
+            Exec($"ALTER TABLE records ADD COLUMN {def}");
+            Log.Information("记录库迁移：新增列 {Col}", col);
         }
     }
 
@@ -104,14 +112,14 @@ public sealed class RecordDb : IDisposable
             cmd.CommandText = @"
                 INSERT INTO records
                   (file_path,file_name,orig_size,orig_w,orig_h,orig_codec,orig_duration,orig_bitrate,
-                   target_bitrate,out_size,ratio,status,fail_reason,notes,started_at,finished_at,
+                   target_bitrate,out_size,ratio,status,fail_reason,notes,dest_path,started_at,finished_at,
                    probe_before,probe_after)
                 VALUES
-                  ($p,$n,$os,$ow,$oh,$oc,$od,$ob,$tb,$outs,$ratio,$st,$fr,$notes,$sa,$fa,$pb,$pa)
+                  ($p,$n,$os,$ow,$oh,$oc,$od,$ob,$tb,$outs,$ratio,$st,$fr,$notes,$dest,$sa,$fa,$pb,$pa)
                 ON CONFLICT(file_path) DO UPDATE SET
                   file_name=$n, orig_size=$os, orig_w=$ow, orig_h=$oh, orig_codec=$oc,
                   orig_duration=$od, orig_bitrate=$ob, target_bitrate=$tb, out_size=$outs,
-                  ratio=$ratio, status=$st, fail_reason=$fr, notes=$notes, started_at=$sa, finished_at=$fa,
+                  ratio=$ratio, status=$st, fail_reason=$fr, notes=$notes, dest_path=$dest, started_at=$sa, finished_at=$fa,
                   probe_before=$pb, probe_after=$pa";
             cmd.Parameters.AddWithValue("$p",     r.FilePath);
             cmd.Parameters.AddWithValue("$n",     r.FileName);
@@ -127,6 +135,7 @@ public sealed class RecordDb : IDisposable
             cmd.Parameters.AddWithValue("$st",    r.Status);
             cmd.Parameters.AddWithValue("$fr",    r.FailReason);
             cmd.Parameters.AddWithValue("$notes", r.Notes);
+            cmd.Parameters.AddWithValue("$dest",  r.DestPath);
             cmd.Parameters.AddWithValue("$sa",    r.StartedAt);
             cmd.Parameters.AddWithValue("$fa",    r.FinishedAt);
             cmd.Parameters.AddWithValue("$pb",    r.ProbeBefore);
@@ -183,7 +192,7 @@ public sealed class RecordDb : IDisposable
             cmd.CommandText =
                 "SELECT file_path,file_name,orig_size,orig_w,orig_h,orig_codec,orig_duration," +
                 "orig_bitrate,target_bitrate,out_size,ratio,status,fail_reason,started_at,finished_at," +
-                "notes FROM records ORDER BY finished_at DESC LIMIT $l";
+                "notes,dest_path FROM records ORDER BY finished_at DESC LIMIT $l";
             cmd.Parameters.AddWithValue("$l", limit);
             using var r = cmd.ExecuteReader();
             while (r.Read())
@@ -206,6 +215,7 @@ public sealed class RecordDb : IDisposable
                     StartedAt     = r.GetInt64(13),
                     FinishedAt    = r.GetInt64(14),
                     Notes         = r.IsDBNull(15) ? "" : r.GetString(15),
+                    DestPath      = r.IsDBNull(16) ? "" : r.GetString(16),
                 });
             }
             return list;
@@ -217,7 +227,7 @@ public sealed class RecordDb : IDisposable
         var rows = GetAll(int.MaxValue);
         var sb = new StringBuilder();
         sb.AppendLine("file_name,file_path,status,orig_size,out_size,ratio,orig_w,orig_h,orig_codec," +
-                      "orig_duration,orig_bitrate,target_bitrate,started_at,finished_at,fail_reason,notes");
+                      "orig_duration,orig_bitrate,target_bitrate,started_at,finished_at,fail_reason,notes,dest_path");
         foreach (var r in rows)
         {
             sb.Append(Csv(r.FileName)).Append(',')
@@ -235,7 +245,8 @@ public sealed class RecordDb : IDisposable
               .Append(r.StartedAt).Append(',')
               .Append(r.FinishedAt).Append(',')
               .Append(Csv(r.FailReason)).Append(',')
-              .Append(Csv(r.Notes)).AppendLine();
+              .Append(Csv(r.Notes)).Append(',')
+              .Append(Csv(r.DestPath)).AppendLine();
         }
         File.WriteAllText(path, sb.ToString(), new UTF8Encoding(true));
         Log.Information("记录已导出 CSV: {Path}（{N} 行）", path, rows.Count);

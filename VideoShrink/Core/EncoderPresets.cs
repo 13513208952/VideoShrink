@@ -41,6 +41,18 @@ public static class EncoderPresets
         new PresetOption<int>(13, "13 — 最快・近实时（压缩率最差）"),
     };
 
+    /// <summary>libx264（H.264 的 CPU 实现）：与 x265 同名同序。</summary>
+    public static readonly IReadOnlyList<PresetOption<string>> X264 = new[]
+    {
+        new PresetOption<string>("veryslow",  "veryslow — 最高压缩率・极慢"),
+        new PresetOption<string>("slower",    "slower — 很高压缩率"),
+        new PresetOption<string>("slow",      "slow — 高压缩率 ★推荐"),
+        new PresetOption<string>("medium",    "medium — 均衡（x264 默认）"),
+        new PresetOption<string>("fast",      "fast — 偏快・压缩率下降"),
+        new PresetOption<string>("faster",    "faster — 快・压缩率低"),
+        new PresetOption<string>("veryfast",  "veryfast — 极快・压缩率最低"),
+    };
+
     /// <summary>x265：veryslow 压缩效率最高，ultrafast 最低。</summary>
     public static readonly IReadOnlyList<PresetOption<string>> X265 = new[]
     {

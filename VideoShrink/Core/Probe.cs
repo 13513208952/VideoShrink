@@ -63,6 +63,25 @@ public sealed class StreamInfo
     public int    Channels     { get; init; }
     public ColorMeta Color     { get; init; } = ColorMeta.Empty;
 
+    /// <summary>封面图（`disposition.attached_pic`）。它是「视频流」，但不是正片。</summary>
+    public bool   AttachedPic  { get; init; }
+    public bool   IsDefault    { get; init; }
+    public bool   IsForced     { get; init; }
+
+    /// <summary>`tags.language` / `tags.title`——多音轨多字幕时全靠它区分。</summary>
+    public string Language     { get; init; } = "";
+    public string Title        { get; init; } = "";
+
+    /// <summary>给人看的标识，用于风险弹窗与日志。</summary>
+    public string Describe()
+    {
+        var parts = new List<string> { CodecName };
+        if (!string.IsNullOrEmpty(Language)) parts.Add(Language);
+        if (!string.IsNullOrEmpty(Title))    parts.Add($"\"{Title}\"");
+        if (Channels > 0)                    parts.Add($"{Channels}ch");
+        return string.Join(" ", parts);
+    }
+
     public double Fps  => ParseRational(AvgFrameRate);
     public double RFps => ParseRational(RFrameRate);
 
@@ -101,8 +120,13 @@ public sealed class MediaInfo
     public List<StreamInfo> Audios    { get; init; } = new();
     public List<StreamInfo> Subtitles { get; init; } = new();
 
-    /// <summary>除首条视频流之外的视频流（封面图/缩略图等），转码时会被丢弃。</summary>
-    public int ExtraVideoStreams { get; init; }
+    /// <summary>除正片之外的视频流：封面图（attached_pic）与其它缩略图。</summary>
+    public List<StreamInfo> ExtraVideos { get; init; } = new();
+
+    /// <summary>封面图（可在 mp4/mkv 中原样保留）。</summary>
+    public List<StreamInfo> CoverArts => ExtraVideos.FindAll(s => s.AttachedPic);
+
+    public int ExtraVideoStreams => ExtraVideos.Count;
 
     public bool HasVideo => Video is not null;
 }
@@ -164,7 +188,7 @@ public static class Probe
         }
 
         StreamInfo? video = null;
-        int extraVideo = 0;
+        var extraVideos = new List<StreamInfo>();
         var audios = new List<StreamInfo>();
         var subs   = new List<StreamInfo>();
 
@@ -190,14 +214,21 @@ public static class Probe
                         GetString(s, "color_transfer"),
                         GetString(s, "color_space"),
                         GetString(s, "color_range")),
+                    AttachedPic  = GetDisposition(s, "attached_pic"),
+                    IsDefault    = GetDisposition(s, "default"),
+                    IsForced     = GetDisposition(s, "forced"),
+                    Language     = GetTag(s, "language"),
+                    Title        = GetTag(s, "title"),
                 };
 
                 switch (type)
                 {
-                    case "video" when video is null: video = si; break;
-                    case "video":                    extraVideo++;   break;
-                    case "audio":                    audios.Add(si); break;
-                    case "subtitle":                 subs.Add(si);   break;
+                    // 封面图也是 codec_type=video，绝不能被当成正片
+                    case "video" when si.AttachedPic: extraVideos.Add(si); break;
+                    case "video" when video is null:  video = si;          break;
+                    case "video":                     extraVideos.Add(si); break;
+                    case "audio":                     audios.Add(si);      break;
+                    case "subtitle":                  subs.Add(si);        break;
                 }
             }
         }
@@ -216,16 +247,36 @@ public static class Probe
 
         return new MediaInfo
         {
-            RawJson           = json,
-            Duration          = duration,
-            Size              = size,
-            BitRate           = bitrate,
-            FormatName        = formatName,
-            Video             = video,
-            Audios            = audios,
-            Subtitles         = subs,
-            ExtraVideoStreams = extraVideo,
+            RawJson     = json,
+            Duration    = duration,
+            Size        = size,
+            BitRate     = bitrate,
+            FormatName  = formatName,
+            Video       = video,
+            Audios      = audios,
+            Subtitles   = subs,
+            ExtraVideos = extraVideos,
         };
+    }
+
+    /// <summary>`disposition.<name>` == 1</summary>
+    private static bool GetDisposition(JsonElement stream, string name) =>
+        stream.TryGetProperty("disposition", out var d) &&
+        d.ValueKind == JsonValueKind.Object &&
+        d.TryGetProperty(name, out var v) &&
+        v.ValueKind == JsonValueKind.Number &&
+        v.TryGetInt32(out int n) && n != 0;
+
+    /// <summary>`tags.<name>`（大小写不敏感：ffprobe 有时给 LANGUAGE）</summary>
+    private static string GetTag(JsonElement stream, string name)
+    {
+        if (!stream.TryGetProperty("tags", out var tags) || tags.ValueKind != JsonValueKind.Object)
+            return "";
+        foreach (var p in tags.EnumerateObject())
+            if (string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase) &&
+                p.Value.ValueKind == JsonValueKind.String)
+                return p.Value.GetString() ?? "";
+        return "";
     }
 
     // ffprobe 的数值字段有的是 JSON number，有的是字符串（还可能是 "N/A"）——统一兜住

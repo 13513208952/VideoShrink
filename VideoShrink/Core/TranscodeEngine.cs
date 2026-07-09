@@ -106,34 +106,42 @@ public sealed class TranscodeEngine
     private void Say(string s) { Log.Information(s); LogLine?.Invoke(s); }
 
     // ── 启动恢复 ──────────────────────────────────────────────────────────
-    /// <summary>处理上次崩溃留下的 *.transcoding.tmp。必须在扫描/转码之前调用。</summary>
-    public async Task RecoverAsync(string dir, CancellationToken ct)
+    /// <summary>
+    /// 处理上次崩溃留下的临时文件。必须在扫描/转码之前调用，
+    /// 且<b>源目录与输出目录都要扫</b>（成品可能落在别处）。
+    /// </summary>
+    public async Task RecoverAsync(IEnumerable<string> dirs, CancellationToken ct)
     {
         var runner = new FfmpegRunner();
-        var msgs = await Replacer.RecoverAsync(runner, dir, _cfg.Recursive, ct).ConfigureAwait(false);
+        var msgs = await Replacer.RecoverAsync(runner, dirs, _cfg.Recursive, ct).ConfigureAwait(false);
         foreach (var m in msgs) Say(m);
     }
 
     // ── 扫描 ──────────────────────────────────────────────────────────────
-    /// <summary>筛出「体积 &gt; 阈值 且 分辨率 ≥ 4K」的文件，并按记录库排除已成功/已失败项。</summary>
-    public async Task<List<string>> ScanAsync(string dir, CancellationToken ct)
+    /// <summary>
+    /// 筛出待转换文件。幂等/增量的依据已从「转完就不再是 4K」改为
+    /// <b>记录库 + 目标文件是否已存在</b>——因为成品可能落在别的目录，
+    /// 分辨率筛选不再能天然排除它。同时必须<b>排除输出目录本身</b>，
+    /// 否则第二轮会把上一轮的成品当输入吃进去。
+    /// </summary>
+    public async Task<List<string>> ScanAsync(OutputPlan plan, CancellationToken ct)
     {
+        string dir = plan.SourceDir;
         if (!Directory.Exists(dir)) throw new DirectoryNotFoundException(dir);
 
         var opt = _cfg.Recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
 
-        // 1) 体积预筛（极快，且天然排除已转换的成品）
         var bySize = Directory.EnumerateFiles(dir, "*", opt)
+            .Where(f => !plan.IsExcluded(f))                       // 不吃自己的成品
             .Where(f => VideoExts.Contains(Path.GetExtension(f).ToLowerInvariant()))
             .Where(f => { try { return new FileInfo(f).Length > _cfg.MinSizeBytes; } catch { return false; } })
             .ToList();
 
-        Say($"体积预筛：{bySize.Count} 个文件 > {_cfg.MinSizeBytes / 1073741824.0:F2}GB，开始 ffprobe 确认分辨率…");
+        Say($"体积预筛：{bySize.Count} 个文件 > {_cfg.MinSizeBytes / 1048576.0:F0}MB，开始 ffprobe 确认…");
 
-        // 2) 记录库排除
         var todo = new List<string>();
         var runner = new FfmpegRunner();
-        int probed = 0, skippedByContainer = 0;
+        int probed = 0, skippedByContainer = 0, skippedByDest = 0;
 
         foreach (var f in bySize)
         {
@@ -143,7 +151,14 @@ public sealed class TranscodeEngine
             if (st == RecordStatus.Success) continue;
             if (st == RecordStatus.Failed && !_cfg.RetryFailed) continue;
 
-            // 容器能否承载所选编码器的产物（就地替换不能改扩展名）
+            // 新建文件夹模式：成品已在，视为已完成（增量继续）
+            if (plan.SaveMode == SaveMode.NewFolder && File.Exists(plan.DestPathFor(f)))
+            {
+                skippedByDest++;
+                continue;
+            }
+
+            // 容器能否承载所选编码器的产物（保持扩展名不变）
             if (!ContainerRules.CanOutput(f, _cfg.Encoder, out string whyNot))
             {
                 skippedByContainer++;
@@ -154,21 +169,28 @@ public sealed class TranscodeEngine
             var info = await Probe.RunAsync(runner, f, ct).ConfigureAwait(false);
             probed++;
             if (info?.Video is null) continue;
-            if (info.Video.Height < _cfg.MinSourceHeight) continue;
+            if (_cfg.MinSourceHeight > 0 && info.Video.Height < _cfg.MinSourceHeight) continue;
+            if (_cfg.EnableMinSourceWidth && _cfg.MinSourceWidth > 0 && info.Video.Width < _cfg.MinSourceWidth) continue;
 
             todo.Add(f);
-
             if (probed % 50 == 0) Say($"…已探测 {probed}/{bySize.Count}，命中 {todo.Count}");
         }
 
-        if (skippedByContainer > 0)
-            Say($"因容器不兼容跳过 {skippedByContainer} 个（所选编码器的产物装不进其扩展名）");
-        Say($"扫描完成：命中 {todo.Count} 个待转换（{_cfg.MinSourceHeight}p+ 且 >阈值）");
+        if (skippedByDest > 0)      Say($"已有成品，跳过 {skippedByDest} 个（增量继续）");
+        if (skippedByContainer > 0) Say($"因容器不兼容跳过 {skippedByContainer} 个");
+        Say($"扫描完成：命中 {todo.Count} 个待转换");
         return todo;
     }
 
     // ── 运行 ──────────────────────────────────────────────────────────────
-    public async Task StartAsync(string dir, CancellationToken externalCt)
+    /// <summary>
+    /// 跑一整批。<paramref name="confirmRisks"/> 由界面提供：预检发现风险时弹窗，
+    /// 返回 false 表示用户取消，此时<b>一个文件都不处理</b>。
+    /// </summary>
+    public async Task StartAsync(
+        OutputPlan plan,
+        Func<PreflightReport, bool> confirmRisks,
+        CancellationToken externalCt)
     {
         if (_busy) return;
         _busy = true;
@@ -189,19 +211,43 @@ public sealed class TranscodeEngine
 
         try
         {
-            await RecoverAsync(dir, ct).ConfigureAwait(false);
+            // ── 编码器：H.264 要先探测出具体实现（独显 > 核显 > CPU）
+            var probeRunner = new FfmpegRunner();
+            string videoEncoder = _cfg.Encoder switch
+            {
+                EncoderKind.X265   => "libx265",
+                EncoderKind.SvtAv1 => "libsvtav1",
+                _ => await H264Support.ResolveAsync(_cfg, probeRunner, ct).ConfigureAwait(false),
+            };
+            bool twoPass = EncoderArgs.SupportsTwoPass(videoEncoder);
 
-            var todo = await ScanAsync(dir, ct).ConfigureAwait(false);
+            await RecoverAsync(new[] { plan.SourceDir, plan.DestDir }, ct).ConfigureAwait(false);
+
+            var todo = await ScanAsync(plan, ct).ConfigureAwait(false);
+            if (todo.Count == 0) { Say("没有需要转换的文件。"); return; }
+
+            // ── 预检：把会丢的东西、会被压的音频、过低的码率全找出来，编码前一次性告知
+            var report = await PreflightReport.BuildAsync(
+                probeRunner, _cfg, plan.SaveMode, todo, ct).ConfigureAwait(false);
+
+            if (report.HasAny && !confirmRisks(report))
+            {
+                Say("用户取消，未处理任何文件。");
+                return;
+            }
+            // 用户点了「我已了解，继续」⇒ 允许为腾出视频码率预算而压缩音频
+            _cfg.AllowAudioCompressionForBudget = report.HasAny;
+
             foreach (var f in todo) _queue.Enqueue(f);
             _queueTotal = todo.Count;
             Notify();
 
-            if (_queueTotal == 0) { Say("没有需要转换的文件。"); return; }
-
             int par = Math.Clamp(_cfg.Parallelism, 1, 4);
-            // 显式打出「实际生效」的 preset：AV1 用数字、x265 用名字，避免用户以为设了却没生效
-            Say($"开始转换：{_queueTotal} 个文件，并行 {par}，编码器 {_cfg.Encoder}，"
-              + $"preset {EncoderArgs.EffectivePreset(_cfg)}（实际生效）");
+            // 显式打出「实际生效」的编码器与 preset，避免用户以为设了却没生效
+            Say($"开始转换：{_queueTotal} 个文件，并行 {par}，编码器 {videoEncoder}"
+              + $"（preset {EncoderArgs.EffectivePreset(_cfg, videoEncoder)}，"
+              + $"{(twoPass ? "两趟 ABR，体积精确" : "单趟 VBR，体积精度较低")}）"
+              + $"，输出 → {plan.DestDir}");
 
             var workers = new List<Task>();
             for (int i = 0; i < par; i++)
@@ -209,13 +255,17 @@ public sealed class TranscodeEngine
                 var runner = new FfmpegRunner();
                 _runners.Add(runner);
                 int id = i;
-                workers.Add(Task.Run(() => WorkerAsync(id, runner, ct), ct));
+                workers.Add(Task.Run(() => WorkerAsync(id, runner, plan, videoEncoder, twoPass, ct), ct));
             }
 
             await Task.WhenAll(workers).ConfigureAwait(false);
 
             Say($"全部结束：成功 {_completed}，失败 {_failed}，跳过 {_skipped}，" +
                 $"共节省 {_savedBytes / 1073741824.0:F2}GB");
+        }
+        catch (H264UnavailableException ex)
+        {
+            Say("✗ " + ex.Message);
         }
         catch (OperationCanceledException)
         {
@@ -230,9 +280,10 @@ public sealed class TranscodeEngine
         }
     }
 
-    private async Task WorkerAsync(int id, FfmpegRunner runner, CancellationToken ct)
+    private async Task WorkerAsync(
+        int id, FfmpegRunner runner, OutputPlan plan, string videoEncoder, bool twoPass, CancellationToken ct)
     {
-        var job = new TranscodeJob(runner, _cfg, _db, () => WaitIfPausedAsync(ct));
+        var job = new TranscodeJob(runner, _cfg, _db, () => WaitIfPausedAsync(ct), plan, videoEncoder, twoPass);
 
         while (_queue.TryDequeue(out var file))
         {
