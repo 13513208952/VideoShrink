@@ -15,7 +15,3 @@ ffmpeg-master-latest-win64-gpl.zip
 Extract `bin/ffmpeg.exe` and `bin/ffprobe.exe` into this directory.
 
 
-```sh
-ffmpeg -hide_banner -buildconf | grep nonfree      # must print nothing
-ffmpeg -hide_banner -encoders  | grep -E 'libx265|libsvtav1'
-```
