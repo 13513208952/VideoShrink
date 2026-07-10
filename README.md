@@ -1,48 +1,25 @@
 # VideoShrink
 
-**Shrink a folder of videos to a target size — without touching your originals.**
+**A video compression tool that supports high compression efficiency**
 
-A Windows desktop GUI that batch-transcodes a folder. By default it writes results into a new
-`<folder>_shrink_output` directory and **never deletes anything**. If you *want* it to replace
-the originals in place, that is a mode you choose deliberately — and even then, nothing is
-overwritten until the result has been cross-checked against the source with `ffprobe` and fully
-decoded end-to-end.
+This is a simple, out-of-the-box video compression tool that comes with an H.264 encoder by default, which balances speed and compression quality. It also supports compressing videos to H.265 and AV1 formats at extremely high compression rates, while maintaining specified resolutions and file sizes.
 
 ---
 
 ## Why another transcoder?
 
-Most tools ask you for a CRF or a bitrate. VideoShrink asks you for a **size**:
+Our tool is ready to use right out of the box, with no additional dependencies required. It’s more streamlined than most similar tools and is one of the few out-of-the-box video compression tools that offers an encoder with high compression ratios. (Plus, it features a modern GUI that’s not too ugly.)
+Please note that encoders with high compression ratios often require a significant amount of CPU time. By default, we have selected the fast H.264 encoder, which supports GPU acceleration. If you need a better compression ratio, please switch to the x265 or svtav1 encoder in the settings.
 
-- *"Make every file 15% of its current size."*  (ratio mode)
-- *"Make every file fit in 8 MB."*  (absolute mode — the Discord problem)
+## Before you run it
 
-It reads each file's real duration and per-track audio bitrates, derives the video bitrate that
-hits the target, and encodes with two-pass ABR so the target is actually met. Audio at or below
-320 kbps is stream-copied by default and simply counted against the budget; if that squeezes the
-video bitrate into unusable territory, you are told up front — and audio is only compressed if
-you say so.
+We have set the default option to create a new folder for saving the output. You can manually switch to override mode to prevent a new folder from being created, but doing so carries the risk of permanently losing the source files. Please assume full responsibility for any consequences resulting from this action. Our program is not perfect, so please be sure to back up your important videos yourself to prepare for potential issues such as metadata loss.
 
-The second reason is the safety machinery:
+Our default encoder is H.264, which offers standard encoding efficiency. It is optimized for GPUs from only three manufacturers: NVIDIA, Intel, and AMD. If your GPU is not one of these three types, or if it is incompatible with our encoder, the program’s encoding speed may be very slow. 
 
-- The encode happens in a **cache directory next to the program**, never in your media folder.
-- Before anything is written, `ffprobe` cross-checks the result against the source:
-  **container type**, video codec, resolution, duration, frame rate, **colour tags**,
-  **every audio track** (codec / channels / sample rate), subtitle count, cover art, and size.
-- Then `ffmpeg -xerror` **decodes the whole file** looking for hidden corruption.
-- Only then does it land: copy to the target volume -> verify length -> (overwrite mode only:
-  delete the old file) -> atomic rename. Filename **and extension** stay byte-identical.
-- A crash at any point is recoverable. Leftover temp files are reconciled on next launch, and the
-  two failure shapes are distinguished: an unfinished *publish* is discarded (your source is
-  untouched), while an interrupted *overwrite* is completed. A corrupt temp is kept as
-  `*.corrupt` and loudly reported — never silently deleted.
-- Every file lands in a SQLite ledger with before/after `ffprobe` snapshots and a **notes**
-  column recording anything lossy that happened.
+If you select the x265 or svtav1 encoder, we can achieve better compression rates, but the process can only be performed using the CPU, and it will be very slow. Based on our experience, encoding a 25-minute 4K video using the svtav1 encoder at compression level 4 typically takes more than 1.5 hours. Please choose an appropriate encoder based on your needs, and we recommend enabling GPU-assisted decoding.
 
-Before the first frame is encoded, a **pre-flight dialog** lists everything that will be lost or
-re-encoded — per file, per stream — and lets you cancel. Continue means *keep as much as
-possible*: tracks the container can hold are copied, text subtitles are converted where they can
-be, and only the genuinely impossible ones are dropped and recorded.
+(Most of the following content was written by artificial intelligence; please use it as a reference at your discretion.)
 
 ## Output: 3 locations x 2 save modes
 
@@ -123,7 +100,6 @@ this machine cannot run is a **hard error**, never a silent fallback. There is a
 ## Requirements
 
 - Windows 10/11, x64
-- No .NET install needed (self-contained single-file build)
 - `ffmpeg.exe` / `ffprobe.exe` in `tools/` — see [`VideoShrink/tools/README.md`](VideoShrink/tools/README.md)
 
 ## Building
@@ -133,27 +109,9 @@ cd VideoShrink
 dotnet publish -c Release
 ```
 
-## Before you run it
-
-Transcoding is lossy by definition, and no amount of checking makes a re-encode identical to the
-source. The default mode leaves your originals alone; **direct save mode deletes them.**
-
-**Back up anything you cannot afford to lose, and try a copy of a few files first.**
-
 ## How this was written
 
-Nearly all of the code in this repository was written by Claude, Anthropic's AI assistant, working
-from requirements, design decisions and review provided by a human author. Treat it accordingly:
-read the code before you trust it with your files, and prefer the default mode, which does not
-delete anything.
-
-That said, the behaviour is not taken on faith. The project carries a test suite of 132 assertions
-covering the container rules against measured muxer behaviour, the output-path matrix, per-stream
-audio and subtitle handling, the bitrate maths, crash recovery in each of its shapes, and the
-guard against compressing its own output twice. Several bugs described in the commit history were
-found by those tests rather than by reading the code, including an audio white-list that did not
-match what the muxers actually accept and a verifier that failed a correct output because Opus can
-only run at 48 kHz.
+This project was completed with the help of the AI assistant Claude. Although we conducted numerous manual and automated tests, the project may still have some shortcomings; we appreciate your understanding. To keep the project’s functionality simple and provide users with as streamlined a dashboard as possible, we have omitted many features and have not included configuration options for various default behaviors, including validation functions. We sincerely apologize for any confusion caused by these design choices, including but not limited to ambiguous interpretations and undeclared default actions.
 
 ## Licence
 
