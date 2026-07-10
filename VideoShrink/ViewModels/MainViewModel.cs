@@ -28,8 +28,10 @@ public sealed class MainViewModel : ViewModelBase
     public ObservableCollection<RecordRow> Records { get; } = new();
 
     // -- 界面分层：XAML 直接按 key 绑定 {Binding Vis[target_width]} -----
-    public Dictionary<string, Visibility> Vis     { get; private set; } = new();
-    public Dictionary<string, bool>       Enabled { get; private set; } = new();
+    public Dictionary<string, Visibility> Vis      { get; private set; } = new();
+    public Dictionary<string, bool>       Enabled  { get; private set; } = new();
+    /// <summary>分组标题的可见性：组内一项不剩时整个标题也要消失。</summary>
+    public Dictionary<string, Visibility> GroupVis { get; private set; } = new();
 
     // -- 弹窗由 View 注入，ViewModel 不反向依赖 Views ------------------
     /// <summary>询问输出目录（AskEveryTime 模式）。返回 null 表示用户取消。</summary>
@@ -325,8 +327,11 @@ public sealed class MainViewModel : ViewModelBase
                       i => i.Key, i => SettingsCatalog.IsVisible(_cfg, i.Key) ? Visibility.Visible : Visibility.Collapsed);
         Enabled = SettingsCatalog.All.ToDictionary(
                       i => i.Key, i => SettingsCatalog.IsEnabled(_cfg, i.Key));
+        GroupVis = SettingsCatalog.Groups.ToDictionary(
+                      g => g, g => SettingsCatalog.IsGroupVisible(_cfg, g) ? Visibility.Visible : Visibility.Collapsed);
         OnPropertyChanged(nameof(Vis));
         OnPropertyChanged(nameof(Enabled));
+        OnPropertyChanged(nameof(GroupVis));
     }
 
     private void DoEditVisibility()

@@ -216,7 +216,7 @@
                             </Border>
 
                             <!-- 输出 -->
-                            <TextBlock Text="输出" Style="{StaticResource GroupHead}"/>
+                            <TextBlock Text="输出" Style="{StaticResource GroupHead}" Visibility="{Binding GroupVis[输出]}"/>
 
                             <ComboBox Margin="0,6" ItemsSource="{Binding OutputLocations}" SelectedItem="{Binding OutputLocation}"
                                       Visibility="{Binding Vis[output_location]}" IsEnabled="{Binding Enabled[output_location]}"
@@ -244,7 +244,7 @@
                             </Grid>
 
                             <!-- 体积目标 -->
-                            <TextBlock Text="体积目标" Style="{StaticResource GroupHead}"/>
+                            <TextBlock Text="体积目标" Style="{StaticResource GroupHead}" Visibility="{Binding GroupVis[体积目标]}"/>
 
                             <ComboBox Margin="0,6" ItemsSource="{Binding SizeTargetModes}" SelectedItem="{Binding SizeTargetMode}"
                                       Visibility="{Binding Vis[size_target_mode]}" IsEnabled="{Binding Enabled[size_target_mode]}"
@@ -262,7 +262,7 @@
                                      Style="{StaticResource MaterialDesignOutlinedTextBox}"/>
 
                             <!-- 画面 -->
-                            <TextBlock Text="画面" Style="{StaticResource GroupHead}"/>
+                            <TextBlock Text="画面" Style="{StaticResource GroupHead}" Visibility="{Binding GroupVis[画面]}"/>
 
                             <TextBox Margin="0,6" Text="{Binding TargetHeight, UpdateSourceTrigger=PropertyChanged}"
                                      Visibility="{Binding Vis[target_height]}" IsEnabled="{Binding Enabled[target_height]}"
@@ -280,7 +280,7 @@
                                      Style="{StaticResource MaterialDesignOutlinedTextBox}"/>
 
                             <!-- 筛选 -->
-                            <TextBlock Text="筛选" Style="{StaticResource GroupHead}"/>
+                            <TextBlock Text="筛选" Style="{StaticResource GroupHead}" Visibility="{Binding GroupVis[筛选]}"/>
 
                             <TextBox Margin="0,6" Text="{Binding MinSizeMegabytes, UpdateSourceTrigger=PropertyChanged}"
                                      Visibility="{Binding Vis[min_size_bytes]}" IsEnabled="{Binding Enabled[min_size_bytes]}"
@@ -308,14 +308,14 @@
                                        Text="递归会把此前新建的输出文件夹一起扫进来；程序会识别并询问。"/>
 
                             <!-- 编码 -->
-                            <TextBlock Text="编码" Style="{StaticResource GroupHead}"/>
+                            <TextBlock Text="编码" Style="{StaticResource GroupHead}" Visibility="{Binding GroupVis[编码]}"/>
 
                             <ComboBox Margin="0,6" ItemsSource="{Binding Encoders}" SelectedItem="{Binding Encoder}"
                                       Visibility="{Binding Vis[encoder]}" IsEnabled="{Binding Enabled[encoder]}"
                                       materialDesign:HintAssist.Hint="编码器"
                                       Style="{StaticResource MaterialDesignOutlinedComboBox}"/>
 
-                            <TextBlock Style="{StaticResource Hint}"
+                            <TextBlock Style="{StaticResource Hint}" Visibility="{Binding Vis[encoder]}"
                                        Text="H264 常规档（默认 GPU 加速，体积精度较低）；X265 / SvtAv1 为压缩率而生（CPU、慢、体积精确）。"/>
 
                             <ComboBox Margin="0,10,0,0" ItemsSource="{Binding Av1Presets}"
@@ -349,14 +349,14 @@
                                       Visibility="{Binding Vis[gpu_decode]}" IsEnabled="{Binding Enabled[gpu_decode]}"/>
 
                             <!-- 音频与字幕 -->
-                            <TextBlock Text="音频与字幕" Style="{StaticResource GroupHead}"/>
+                            <TextBlock Text="音频与字幕" Style="{StaticResource GroupHead}" Visibility="{Binding GroupVis[音频与字幕]}"/>
 
                             <ComboBox Margin="0,6" ItemsSource="{Binding AudioPolicies}" SelectedItem="{Binding AudioPolicy}"
                                       Visibility="{Binding Vis[audio_policy]}" IsEnabled="{Binding Enabled[audio_policy]}"
                                       materialDesign:HintAssist.Hint="音频策略"
                                       Style="{StaticResource MaterialDesignOutlinedComboBox}"/>
 
-                            <TextBlock Style="{StaticResource Hint}"
+                            <TextBlock Style="{StaticResource Hint}" Visibility="{Binding Vis[audio_policy]}"
                                        Text="Auto：装得下就直拷，装不下的那几轨才重编码。CopyOnly：绝不重编码，装不下即判失败。"/>
 
                             <TextBox Margin="0,10,0,0" Text="{Binding AudioReencodeBitrateK, UpdateSourceTrigger=PropertyChanged}"
@@ -369,7 +369,7 @@
                                       Visibility="{Binding Vis[keep_subtitles]}" IsEnabled="{Binding Enabled[keep_subtitles]}"/>
 
                             <!-- 验收 -->
-                            <TextBlock Text="验收" Style="{StaticResource GroupHead}"/>
+                            <TextBlock Text="验收" Style="{StaticResource GroupHead}" Visibility="{Binding GroupVis[验收]}"/>
 
                             <CheckBox Content="整片解码校验（推荐开启）" IsChecked="{Binding FullDecodeCheck}"
                                       Visibility="{Binding Vis[full_decode_check]}" IsEnabled="{Binding Enabled[full_decode_check]}"/>
@@ -385,7 +385,7 @@
                                      Style="{StaticResource MaterialDesignOutlinedTextBox}"/>
 
                             <!-- 流程 -->
-                            <TextBlock Text="流程" Style="{StaticResource GroupHead}"/>
+                            <TextBlock Text="流程" Style="{StaticResource GroupHead}" Visibility="{Binding GroupVis[流程]}"/>
 
                             <TextBox Margin="0,6" Text="{Binding Parallelism, UpdateSourceTrigger=PropertyChanged}"
                                      Visibility="{Binding Vis[parallelism]}" IsEnabled="{Binding Enabled[parallelism]}"

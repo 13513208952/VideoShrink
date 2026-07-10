@@ -83,4 +83,14 @@ public static class SettingsCatalog
     /// <summary>高级项在「高级功能关闭」时既不可见也<b>不可用</b>。</summary>
     public static bool IsEnabled(AppConfig cfg, string key) =>
         !IsAdvanced(key) || cfg.ShowAdvancedEffective;
+
+    public static IEnumerable<string> Groups => All.Select(i => i.Group).Distinct();
+
+    /// <summary>
+    /// 分组标题是否应显示：组内<b>还剩至少一项可见</b>时才显示。
+    /// 「验收」「流程」两组全是高级项，高级功能关闭时整组消失，标题不能孤零零留着；
+    /// 自定义模式下用户也可能把某一组的项勾光。
+    /// </summary>
+    public static bool IsGroupVisible(AppConfig cfg, string group) =>
+        All.Any(i => i.Group == group && IsVisible(cfg, i.Key));
 }

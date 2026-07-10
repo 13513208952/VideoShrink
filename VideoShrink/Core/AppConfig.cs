@@ -127,8 +127,12 @@ public class AppConfig
     public int MinSourceWidth { get; set; } = 0;
 
     // -- 编码器 --------------------------------------------------------
+    /// <summary>
+    /// 默认 H.264：普通用户的常规档，默认走 GPU 加速，兼顾速度与效果。
+    /// X265 / SvtAv1 是为压缩率而生的选择（CPU、慢、体积精确），由用户主动选。
+    /// </summary>
     [JsonPropertyName("encoder")]
-    public EncoderKind Encoder { get; set; } = EncoderKind.X265;
+    public EncoderKind Encoder { get; set; } = EncoderKind.H264;
 
     /// <summary>
     /// x265 preset（<b>仅在 Encoder = X265 时生效</b>）。字符串：veryslow...veryfast。
@@ -147,9 +151,12 @@ public class AppConfig
     [JsonPropertyName("preset_av1")]
     public int PresetAv1 { get; set; } = 2;
 
-    /// <summary>libx264 preset（<b>仅在 Encoder = H264 且实现为 Cpu 时生效</b>）。</summary>
+    /// <summary>
+    /// libx264 preset（<b>仅在 Encoder = H264 且实现为 Cpu 时生效</b>）。
+    /// 默认 medium：H.264 这一档的定位就是常规使用，不该默认拿速度换压缩率。
+    /// </summary>
     [JsonPropertyName("preset_x264")]
-    public string PresetX264 { get; set; } = "slow";
+    public string PresetX264 { get; set; } = "medium";
 
     /// <summary>H.264 的实现选择（高级项）。</summary>
     [JsonPropertyName("h264_impl")]
