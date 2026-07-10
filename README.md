@@ -147,7 +147,7 @@ from requirements, design decisions and review provided by a human author. Treat
 read the code before you trust it with your files, and prefer the default mode, which does not
 delete anything.
 
-That said, the behaviour is not taken on faith. The project carries a test suite of 121 assertions
+That said, the behaviour is not taken on faith. The project carries a test suite of 132 assertions
 covering the container rules against measured muxer behaviour, the output-path matrix, per-stream
 audio and subtitle handling, the bitrate maths, crash recovery in each of its shapes, and the
 guard against compressing its own output twice. Several bugs described in the commit history were
