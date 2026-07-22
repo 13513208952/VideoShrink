@@ -1,0 +1,37 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="VideoShrink.Views.PreflightDialog"
+        Title="开始前确认" Height="560" Width="820"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
+
+  <Grid Margin="20">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto"/>
+      <RowDefinition Height="Auto"/>
+      <RowDefinition Height="*"/>
+      <RowDefinition Height="Auto"/>
+    </Grid.RowDefinitions>
+
+    <TextBlock x:Name="HeadlineText" Grid.Row="0" FontSize="18" FontWeight="SemiBold" TextWrapping="Wrap"/>
+
+    <Border x:Name="DangerBox" Grid.Row="1" Margin="0,12,0,0" Padding="14" CornerRadius="4"
+            Background="#1FE53935" BorderBrush="#E53935" BorderThickness="1" IsVisible="False">
+      <TextBlock x:Name="DangerText" TextWrapping="Wrap"/>
+    </Border>
+
+    <Border Grid.Row="2" Margin="0,14,0,0" BorderThickness="1" CornerRadius="4"
+            BorderBrush="{DynamicResource MaterialDividerBrush}">
+      <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
+        <TextBox x:Name="DetailText" IsReadOnly="True" BorderThickness="0"
+                 Background="Transparent" TextWrapping="NoWrap"
+                 FontFamily="Consolas, monospace" Padding="12"/>
+      </ScrollViewer>
+    </Border>
+
+    <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+      <Button Content="取消" Width="120" Click="Cancel_Click"/>
+      <Button x:Name="ContinueButton" Content="我已了解，继续" Width="180" Margin="12,0,0,0"
+              Click="Continue_Click" Classes="accent"/>
+    </StackPanel>
+  </Grid>
+</Window>

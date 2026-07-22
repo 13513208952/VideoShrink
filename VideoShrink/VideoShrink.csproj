@@ -1,52 +1,46 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <OutputType>WinExe</OutputType>
-    <TargetFramework>net9.0-windows</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <UseWPF>true</UseWPF>
-    <UseWindowsForms>true</UseWindowsForms>
     <RootNamespace>VideoShrink</RootNamespace>
     <AssemblyName>VideoShrink</AssemblyName>
-    <!-- NtSuspendProcess / NtResumeProcess 需要 P/Invoke，不需 unsafe -->
-    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
   </PropertyGroup>
 
-  <!-- Release 单文件自包含发布 win-x64（目标机无需装 .NET） -->
   <PropertyGroup Condition="'$(Configuration)'=='Release'">
-    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
-    <PublishSingleFile>true</PublishSingleFile>
+    <RuntimeIdentifier>linux-x64</RuntimeIdentifier>
     <SelfContained>true</SelfContained>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <PublishReadyToRun>true</PublishReadyToRun>
   </PropertyGroup>
 
-  <!-- 随包携带 ffmpeg / ffprobe（nonfree 构建，含 libx265 / libsvtav1），单文件发布时置于 exe 旁 -->
   <ItemGroup>
-    <Content Include="tools\ffmpeg.exe">
-      <Link>tools\ffmpeg.exe</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
-    </Content>
-    <Content Include="tools\ffprobe.exe">
-      <Link>tools\ffprobe.exe</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
-    </Content>
-  </ItemGroup>
-
-  <ItemGroup>
-    <!-- Google Material Design 主题（成熟公开设计体系） -->
-    <PackageReference Include="MaterialDesignThemes" Version="5.*" />
-    <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.*" />
-    <!-- XxHash64：非加密快速哈希，用于识别「这是我们自己产出的成品」 -->
-    <PackageReference Include="System.IO.Hashing" Version="9.0.*" />
+    <PackageReference Include="Avalonia" Version="11.2.0" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.2.0" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.2.0" />
+    <PackageReference Include="Avalonia.Controls.DataGrid" Version="11.2.0" />
+    <PackageReference Include="Material.Avalonia" Version="3.8.0" />
+    <PackageReference Include="Material.Avalonia.DataGrid" Version="3.8.0" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.*" />
+    <PackageReference Include="System.IO.Hashing" Version="8.0.*" />
     <PackageReference Include="Serilog" Version="4.*" />
     <PackageReference Include="Serilog.Sinks.File" Version="6.*" />
     <PackageReference Include="Serilog.Sinks.Debug" Version="3.*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="tools\ffmpeg">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+    </Content>
+    <Content Include="tools\ffprobe">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+    </Content>
   </ItemGroup>
 
 </Project>

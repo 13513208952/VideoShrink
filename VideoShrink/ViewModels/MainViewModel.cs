@@ -4,16 +4,13 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Windows;
+using Avalonia.Threading;
 using VideoShrink.Core;
 using VideoShrink.Data;
 using Serilog;
-// UseWindowsForms=true 会让 Application 在 WPF/WinForms 间产生歧义；
-// System.Windows.ResizeMode（窗口边框行为）也和我们的缩放模式撞名
-using Application = System.Windows.Application;
-using ResizeMode  = VideoShrink.Core.ResizeMode;
 
 namespace VideoShrink.ViewModels;
 
@@ -27,27 +24,18 @@ public sealed class MainViewModel : ViewModelBase
     public ObservableCollection<string>    Logs    { get; } = new();
     public ObservableCollection<RecordRow> Records { get; } = new();
 
-    // -- 界面分层：XAML 直接按 key 绑定 {Binding Vis[target_width]} -----
-    public Dictionary<string, Visibility> Vis      { get; private set; } = new();
-    public Dictionary<string, bool>       Enabled  { get; private set; } = new();
-    /// <summary>分组标题的可见性：组内一项不剩时整个标题也要消失。</summary>
-    public Dictionary<string, Visibility> GroupVis { get; private set; } = new();
+    public Dictionary<string, bool> Vis      { get; private set; } = new();
+    public Dictionary<string, bool> Enabled  { get; private set; } = new();
+    public Dictionary<string, bool> GroupVis { get; private set; } = new();
 
-    // -- 弹窗由 View 注入，ViewModel 不反向依赖 Views ------------------
-    /// <summary>询问输出目录（AskEveryTime 模式）。返回 null 表示用户取消。</summary>
     public Func<string?>? AskOutputDir { get; set; }
-    /// <summary>预检风险弹窗。返回 true = 用户确认继续。</summary>
+    public Func<string?>? BrowseForFolder { get; set; }
     public Func<PreflightReport, bool>? ConfirmRisks { get; set; }
-    /// <summary>发现已处理成品时的三选一。默认放弃（二次压缩不可逆）。</summary>
     public Func<ReprocessReport, ReprocessDecision>? ConfirmReprocess { get; set; }
-    /// <summary>自定义模式的逐项隐藏编辑界面。返回 null 表示取消。</summary>
     public Func<IReadOnlyList<string>, IReadOnlyList<string>?>? EditVisibility { get; set; }
-    /// <summary>致命错误提示。</summary>
     public Action<string>? ShowError { get; set; }
-    /// <summary>二次确认。</summary>
     public Func<string, bool>? Confirm { get; set; }
 
-    // -- 选项列表 ------------------------------------------------------
     public IReadOnlyList<PresetOption<string>> X265Presets { get; } = EncoderPresets.X265;
     public IReadOnlyList<PresetOption<string>> X264Presets { get; } = EncoderPresets.X264;
     public IReadOnlyList<PresetOption<int>>    Av1Presets  { get; } = EncoderPresets.Av1;
@@ -89,7 +77,6 @@ public sealed class MainViewModel : ViewModelBase
         RefreshRecords();
     }
 
-    // -- 命令 ----------------------------------------------------------
     public RelayCommand BrowseCommand         { get; }
     public RelayCommand BrowseFixedCommand    { get; }
     public RelayCommand ScanCommand           { get; }
@@ -103,7 +90,6 @@ public sealed class MainViewModel : ViewModelBase
     public RelayCommand EditVisibilityCommand { get; }
     public RelayCommand ResetDefaultsCommand  { get; }
 
-    // -- 源文件夹 ------------------------------------------------------
     private string _targetDir = "";
     public string TargetDir
     {
@@ -115,12 +101,13 @@ public sealed class MainViewModel : ViewModelBase
                 _cfg.TargetDir = value;
                 _cfg.Save();
                 OnPropertyChanged(nameof(HasDir));
+                ScanCommand.RaiseCanExecuteChanged();
+                StartCommand.RaiseCanExecuteChanged();
             }
         }
     }
     public bool HasDir => !string.IsNullOrWhiteSpace(TargetDir) && Directory.Exists(TargetDir);
 
-    // -- 进度状态 ------------------------------------------------------
     private int _queueTotal; public int QueueTotal { get => _queueTotal; private set => SetField(ref _queueTotal, value); }
     private int _completed;  public int Completed  { get => _completed;  private set => SetField(ref _completed, value); }
     private int _failed;     public int Failed     { get => _failed;     private set => SetField(ref _failed, value); }
@@ -143,8 +130,8 @@ public sealed class MainViewModel : ViewModelBase
     public string EtaText { get => _etaText; private set => SetField(ref _etaText, value); }
 
     private bool _isRunning;
-    public bool IsRunning { get => _isRunning; private set { if (SetField(ref _isRunning, value)) OnPropertyChanged(nameof(IsIdle)); } }
-    private bool _isPaused; public bool IsPaused { get => _isPaused; private set => SetField(ref _isPaused, value); }
+    public bool IsRunning { get => _isRunning; private set { if (SetField(ref _isRunning, value)) { OnPropertyChanged(nameof(IsIdle)); RaiseCommandChanged(); } } }
+    private bool _isPaused; public bool IsPaused { get => _isPaused; private set { if (SetField(ref _isPaused, value)) RaiseCommandChanged(); } }
     public bool IsIdle => !IsRunning;
 
     private string _status = "就绪";
@@ -155,7 +142,19 @@ public sealed class MainViewModel : ViewModelBase
     private string _historySaved = "0 B";
     public string HistorySaved { get => _historySaved; private set => SetField(ref _historySaved, value); }
 
-    // -- 设置：每一次修改都立即写入 settings.json -----------------------
+    private void RaiseCommandChanged()
+    {
+        BrowseCommand.RaiseCanExecuteChanged();
+        BrowseFixedCommand.RaiseCanExecuteChanged();
+        ScanCommand.RaiseCanExecuteChanged();
+        StartCommand.RaiseCanExecuteChanged();
+        PauseCommand.RaiseCanExecuteChanged();
+        ResumeCommand.RaiseCanExecuteChanged();
+        StopCommand.RaiseCanExecuteChanged();
+        ResetDefaultsCommand.RaiseCanExecuteChanged();
+        EditVisibilityCommand.RaiseCanExecuteChanged();
+    }
+
     private void SaveAndNotify([System.Runtime.CompilerServices.CallerMemberName] string? n = null)
     {
         _cfg.Save();
@@ -179,8 +178,7 @@ public sealed class MainViewModel : ViewModelBase
     }
     public bool IsDestructive => _cfg.SaveMode == SaveMode.DirectOverwrite;
 
-    /// <summary>就地覆盖是危险操作，主界面上要一直挂着红色横幅。</summary>
-    public Visibility DestructiveWarnVisible => IsDestructive ? Visibility.Visible : Visibility.Collapsed;
+    public bool DestructiveWarnVisible => IsDestructive;
 
     public string FixedOutputPath
     {
@@ -261,13 +259,32 @@ public sealed class MainViewModel : ViewModelBase
     public bool IsX265 => _cfg.Encoder == EncoderKind.X265;
     public bool IsH264 => _cfg.Encoder == EncoderKind.H264;
 
-    public string Preset      { get => _cfg.Preset;     set { _cfg.Preset = value; SaveAndNotify(); } }
-    public string PresetX264  { get => _cfg.PresetX264; set { _cfg.PresetX264 = value; SaveAndNotify(); } }
+    public string Preset      { get => _cfg.Preset;     set { _cfg.Preset = value; SaveAndNotify(); OnPropertyChanged(nameof(SelectedX265Preset)); } }
+    public string PresetX264  { get => _cfg.PresetX264; set { _cfg.PresetX264 = value; SaveAndNotify(); OnPropertyChanged(nameof(SelectedX264Preset)); } }
     public int    PresetAv1
     {
         get => _cfg.PresetAv1;
-        set { _cfg.PresetAv1 = EncoderPresets.ClampAv1(value); SaveAndNotify(); }
+        set { _cfg.PresetAv1 = EncoderPresets.ClampAv1(value); SaveAndNotify(); OnPropertyChanged(nameof(SelectedAv1Preset)); }
     }
+
+    public PresetOption<int>? SelectedAv1Preset
+    {
+        get => Av1Presets.FirstOrDefault(p => p.Value == PresetAv1);
+        set { if (value is not null) PresetAv1 = value.Value; }
+    }
+
+    public PresetOption<string>? SelectedX265Preset
+    {
+        get => X265Presets.FirstOrDefault(p => p.Value == Preset);
+        set { if (value is not null) Preset = value.Value; }
+    }
+
+    public PresetOption<string>? SelectedX264Preset
+    {
+        get => X264Presets.FirstOrDefault(p => p.Value == PresetX264);
+        set { if (value is not null) PresetX264 = value.Value; }
+    }
+
     public H264Impl H264Impl { get => _cfg.H264Impl; set { _cfg.H264Impl = value; SaveAndNotify(); } }
     public bool GpuDecode    { get => _cfg.GpuDecode; set { _cfg.GpuDecode = value; SaveAndNotify(); } }
 
@@ -297,15 +314,12 @@ public sealed class MainViewModel : ViewModelBase
     }
     public bool RetryFailed { get => _cfg.RetryFailed; set { _cfg.RetryFailed = value; SaveAndNotify(); } }
 
-    // -- 界面分层 ------------------------------------------------------
-    /// <summary>「启用高级调整」。自定义模式下此开关本身被隐藏（两套隐藏思路互斥）。</summary>
     public bool ShowAdvanced
     {
         get => _cfg.ShowAdvancedUserPref;
         set { _cfg.ShowAdvancedUserPref = value; _cfg.Save(); OnPropertyChanged(); RebuildVisibility(); }
     }
 
-    /// <summary>自定义模式：强制展开全部高级项，改用逐项勾选隐藏。</summary>
     public bool CustomMode
     {
         get => _cfg.CustomMode;
@@ -315,20 +329,20 @@ public sealed class MainViewModel : ViewModelBase
             OnPropertyChanged();
             OnPropertyChanged(nameof(ShowAdvancedToggleVisible));
             RebuildVisibility();
+            EditVisibilityCommand.RaiseCanExecuteChanged();
         }
     }
 
-    /// <summary>自定义模式下「启用高级调整」开关本身要藏起来。</summary>
-    public Visibility ShowAdvancedToggleVisible => CustomMode ? Visibility.Collapsed : Visibility.Visible;
+    public bool ShowAdvancedToggleVisible => !CustomMode;
 
     private void RebuildVisibility()
     {
         Vis     = SettingsCatalog.All.ToDictionary(
-                      i => i.Key, i => SettingsCatalog.IsVisible(_cfg, i.Key) ? Visibility.Visible : Visibility.Collapsed);
+                      i => i.Key, i => SettingsCatalog.IsVisible(_cfg, i.Key));
         Enabled = SettingsCatalog.All.ToDictionary(
                       i => i.Key, i => SettingsCatalog.IsEnabled(_cfg, i.Key));
         GroupVis = SettingsCatalog.Groups.ToDictionary(
-                      g => g, g => SettingsCatalog.IsGroupVisible(_cfg, g) ? Visibility.Visible : Visibility.Collapsed);
+                      g => g, g => SettingsCatalog.IsGroupVisible(_cfg, g));
         OnPropertyChanged(nameof(Vis));
         OnPropertyChanged(nameof(Enabled));
         OnPropertyChanged(nameof(GroupVis));
@@ -338,9 +352,9 @@ public sealed class MainViewModel : ViewModelBase
     {
         if (EditVisibility is null) return;
         var result = EditVisibility(_cfg.HiddenSettings.ToList());
-        if (result is null) return;                       // 用户取消
+        if (result is null) return;
         _cfg.HiddenSettings = result.ToList();
-        _cfg.Save();                                      // 保存并退出编辑界面即写盘
+        _cfg.Save();
         RebuildVisibility();
         OnEngineLog($"自定义面板已更新：隐藏 {result.Count} 项");
     }
@@ -357,7 +371,6 @@ public sealed class MainViewModel : ViewModelBase
         OnEngineLog("已恢复默认设置");
     }
 
-    // -- 引擎事件 ------------------------------------------------------
     private void OnEngineLog(string line) => Dispatch(() =>
     {
         Logs.Add($"[{DateTime.Now:HH:mm:ss}] {line}");
@@ -386,43 +399,27 @@ public sealed class MainViewModel : ViewModelBase
 
     private static void Dispatch(Action a)
     {
-        var app = Application.Current;
-        if (app is null) { a(); return; }
-        if (app.Dispatcher.CheckAccess()) a();
-        else app.Dispatcher.BeginInvoke(a);
-    }
-
-    // -- 动作 ----------------------------------------------------------
-    private static string? PickFolder(string description, string initial)
-    {
-        using var d = new System.Windows.Forms.FolderBrowserDialog
-        {
-            Description = description,
-            UseDescriptionForTitle = true,
-            SelectedPath = Directory.Exists(initial) ? initial : "",
-        };
-        return d.ShowDialog() == System.Windows.Forms.DialogResult.OK ? d.SelectedPath : null;
+        Dispatcher.UIThread.Post(a);
     }
 
     private void Browse()
     {
-        var p = PickFolder("选择要压缩的源文件夹", TargetDir);
+        var p = BrowseForFolder?.Invoke();
         if (p is not null) TargetDir = p;
     }
 
     private void BrowseFixed()
     {
-        var p = PickFolder("选择固定输出路径", FixedOutputPath);
+        var p = BrowseForFolder?.Invoke();
         if (p is not null) FixedOutputPath = p;
     }
 
-    /// <summary>解析目标路径并建好输出文件夹。失败即返回 null（调用方必须放弃整批）。</summary>
     private OutputPlan? BuildOutputPlan()
     {
         try
         {
             string? baseDir = OutputPlan.ResolveBaseDir(_cfg, TargetDir,
-                () => AskOutputDir?.Invoke() ?? PickFolder("选择本次的输出路径", TargetDir));
+                () => AskOutputDir?.Invoke() ?? BrowseForFolder?.Invoke());
             if (baseDir is null) { OnEngineLog("已取消：未选择输出路径"); return null; }
 
             return OutputPlan.Prepare(_cfg, TargetDir, baseDir);
@@ -474,7 +471,7 @@ public sealed class MainViewModel : ViewModelBase
                 report => ConfirmReprocess?.Invoke(report) ?? ReprocessDecision.Abort,
                 _cts.Token));
         }
-        catch (OperationCanceledException) { /* 停止属正常 */ }
+        catch (OperationCanceledException) { }
         catch (Exception ex)
         {
             Log.Error(ex, "转换过程异常");
@@ -523,11 +520,16 @@ public sealed class MainViewModel : ViewModelBase
 
     private static void OpenFolder(string path)
     {
-        try { Process.Start(new ProcessStartInfo("explorer.exe", path) { UseShellExecute = true }); }
+        try
+        {
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+                Process.Start("xdg-open", path);
+            else
+                Process.Start(new ProcessStartInfo("explorer.exe", path) { UseShellExecute = true });
+        }
         catch (Exception ex) { Log.Warning(ex, "打开目录失败"); }
     }
 
-    // -- 格式化 --------------------------------------------------------
     public static string FormatBytes(long b)
     {
         if (b <= 0) return "0 B";

@@ -1,0 +1,38 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="VideoShrink.Views.ReprocessDialog"
+        Title="发现已处理过的文件" Height="560" Width="820"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
+
+  <Grid Margin="20">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto"/>
+      <RowDefinition Height="Auto"/>
+      <RowDefinition Height="*"/>
+      <RowDefinition Height="Auto"/>
+    </Grid.RowDefinitions>
+
+    <TextBlock x:Name="HeadlineText" Grid.Row="0" FontSize="18" FontWeight="SemiBold" TextWrapping="Wrap"/>
+
+    <Border Grid.Row="1" Margin="0,12,0,0" Padding="14" CornerRadius="4"
+            Background="#1FE53935" BorderBrush="#E53935" BorderThickness="1">
+      <TextBlock TextWrapping="Wrap"
+                 Text="这些文件是本程序此前产出的成品。再压一次是不可逆的画质损失。建议放弃本次操作，检查源文件夹与递归设置。"/>
+    </Border>
+
+    <Border Grid.Row="2" Margin="0,14,0,0" BorderThickness="1" CornerRadius="4"
+            BorderBrush="{DynamicResource MaterialDividerBrush}">
+      <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
+        <TextBox x:Name="DetailText" IsReadOnly="True" BorderThickness="0"
+                 Background="Transparent" TextWrapping="NoWrap"
+                 FontFamily="Consolas, monospace" Padding="12"/>
+      </ScrollViewer>
+    </Border>
+
+    <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+      <Button Content="全部包含并重新处理" Width="190" Click="IncludeAll_Click"/>
+      <Button Content="排除已处理的文件" Width="180" Margin="12,0,0,0" Click="Exclude_Click"/>
+      <Button Content="放弃本次操作（推荐）" Width="200" Margin="12,0,0,0" Click="Abort_Click" Classes="accent"/>
+    </StackPanel>
+  </Grid>
+</Window>

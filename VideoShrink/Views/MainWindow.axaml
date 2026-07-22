@@ -1,0 +1,387 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:material="using:Material.Styles.Controls"
+        mc:Ignorable="d"
+        x:Class="VideoShrink.Views.MainWindow"
+        Title="VideoShrink — 批量压缩视频，校验通过才落地"
+        Height="800" Width="1180"
+        WindowStartupLocation="CenterScreen">
+
+  <Window.Resources>
+    <FontFamily x:Key="MonoFont">Consolas, Cascadia Mono, monospace</FontFamily>
+  </Window.Resources>
+
+  <Window.Styles>
+    <Style Selector="TextBlock.StatLabel">
+      <Setter Property="Opacity" Value="0.6"/>
+      <Setter Property="FontSize" Value="12"/>
+    </Style>
+    <Style Selector="TextBlock.StatValue">
+      <Setter Property="FontSize" Value="24"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+    <Style Selector="TextBlock.GroupHead">
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Margin" Value="0,20,0,8"/>
+    </Style>
+    <Style Selector="TextBlock.Hint">
+      <Setter Property="TextWrapping" Value="Wrap"/>
+      <Setter Property="Opacity" Value="0.6"/>
+      <Setter Property="FontSize" Value="12"/>
+      <Setter Property="Margin" Value="0,4,0,0"/>
+    </Style>
+  </Window.Styles>
+
+  <Grid Margin="16">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto"/>
+      <RowDefinition Height="Auto"/>
+      <RowDefinition Height="Auto"/>
+      <RowDefinition Height="*"/>
+    </Grid.RowDefinitions>
+
+    <!-- Row 0: 源文件夹 -->
+    <material:Card Grid.Row="0" Padding="16" Margin="0,0,0,12">
+      <Grid>
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*"/>
+          <ColumnDefinition Width="Auto"/>
+          <ColumnDefinition Width="Auto"/>
+        </Grid.ColumnDefinitions>
+
+        <TextBox Grid.Column="0" VerticalAlignment="Center"
+                 Text="{Binding TargetDir, UpdateSourceTrigger=PropertyChanged}"
+                 Watermark="源文件夹"/>
+
+        <Button Grid.Column="1" Margin="12,0,0,0" Content="浏览..."
+                Command="{Binding BrowseCommand}"/>
+
+        <Button Grid.Column="2" Margin="8,0,0,0" Content="扫描"
+                Command="{Binding ScanCommand}"/>
+      </Grid>
+    </material:Card>
+
+    <!-- Row 1: 统计 -->
+    <material:Card Grid.Row="1" Padding="16" Margin="0,0,0,12">
+      <Grid>
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*"/><ColumnDefinition Width="*"/>
+          <ColumnDefinition Width="*"/><ColumnDefinition Width="*"/>
+          <ColumnDefinition Width="*"/><ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <StackPanel Grid.Column="0">
+          <TextBlock Text="待转换总数" Classes="StatLabel"/>
+          <TextBlock Text="{Binding QueueTotal}" Classes="StatValue"/>
+        </StackPanel>
+        <StackPanel Grid.Column="1">
+          <TextBlock Text="已完成" Classes="StatLabel"/>
+          <TextBlock Text="{Binding Completed}" Classes="StatValue" Foreground="#00897B"/>
+        </StackPanel>
+        <StackPanel Grid.Column="2">
+          <TextBlock Text="剩余" Classes="StatLabel"/>
+          <TextBlock Text="{Binding Remaining}" Classes="StatValue"/>
+        </StackPanel>
+        <StackPanel Grid.Column="3">
+          <TextBlock Text="失败" Classes="StatLabel"/>
+          <TextBlock Text="{Binding Failed}" Classes="StatValue"/>
+        </StackPanel>
+        <StackPanel Grid.Column="4">
+          <TextBlock Text="已节省空间" Classes="StatLabel"/>
+          <TextBlock Text="{Binding SavedText}" Classes="StatValue"/>
+        </StackPanel>
+        <StackPanel Grid.Column="5">
+          <TextBlock Text="预计剩余时间" Classes="StatLabel"/>
+          <TextBlock Text="{Binding EtaText}" Classes="StatValue"/>
+        </StackPanel>
+      </Grid>
+    </material:Card>
+
+    <!-- Row 2: 进度 + 控制 -->
+    <material:Card Grid.Row="2" Padding="16" Margin="0,0,0,12">
+      <StackPanel>
+        <Border Padding="10" Margin="0,0,0,10" CornerRadius="4"
+                Background="#1FE53935" BorderBrush="#E53935" BorderThickness="1"
+                IsVisible="{Binding DestructiveWarnVisible}">
+          <TextBlock TextWrapping="Wrap"
+                     Text="警告：当前为直接文件保存模式：成品会直接写入目标路径，同名文件将被覆盖且不作校验。目标为源目录时即就地替换原文件。"/>
+        </Border>
+
+        <Grid>
+          <TextBlock FontWeight="SemiBold">
+            <Run Text="正在处理："/>
+            <Run Text="{Binding CurrentFile, Mode=OneWay, TargetNullValue='—'}"/>
+          </TextBlock>
+          <TextBlock HorizontalAlignment="Right" Opacity="0.7" Text="{Binding Status}"/>
+        </Grid>
+
+        <TextBlock Margin="0,10,0,2" Classes="StatLabel" Text="当前文件进度"/>
+        <ProgressBar Height="8" Minimum="0" Maximum="100" Value="{Binding CurrentPercent, Mode=OneWay}"/>
+
+        <TextBlock Margin="0,10,0,2" Classes="StatLabel" Text="总体进度"/>
+        <ProgressBar Height="8" Minimum="0" Maximum="100" Value="{Binding OverallPercent, Mode=OneWay}"
+                     Foreground="#00897B"/>
+
+        <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+          <Button Content="开始" Width="110" Command="{Binding StartCommand}"
+                  Classes="accent"/>
+          <Button Content="暂停" Width="110" Margin="10,0,0,0" Command="{Binding PauseCommand}"/>
+          <Button Content="继续" Width="110" Margin="10,0,0,0" Command="{Binding ResumeCommand}"/>
+          <Button Content="停止" Width="110" Margin="10,0,0,0" Command="{Binding StopCommand}"/>
+
+          <Border Width="1" Margin="20,4" Background="{DynamicResource MaterialDividerBrush}"/>
+
+          <TextBlock VerticalAlignment="Center" Opacity="0.75">
+            <Run Text="历史累计：成功"/>
+            <Run Text="{Binding HistorySuccess, Mode=OneWay}"/>
+            <Run Text="，失败"/>
+            <Run Text="{Binding HistoryFailed, Mode=OneWay}"/>
+            <Run Text="，共省"/>
+            <Run Text="{Binding HistorySaved, Mode=OneWay}"/>
+          </TextBlock>
+        </StackPanel>
+      </StackPanel>
+    </material:Card>
+
+    <!-- Row 3: 日志 / 记录 / 设置 -->
+    <material:Card Grid.Row="3" Padding="0">
+      <TabControl>
+        <TabItem Header="日志">
+          <ListBox ItemsSource="{Binding Logs}" FontFamily="{StaticResource MonoFont}"
+                   ScrollViewer.HorizontalScrollBarVisibility="Auto"/>
+        </TabItem>
+
+        <TabItem Header="转换记录">
+          <DockPanel>
+            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="12,8">
+              <Button Content="刷新" Command="{Binding RefreshRecordsCommand}"/>
+              <Button Content="导出 CSV" Margin="8,0,0,0" Command="{Binding ExportCsvCommand}"/>
+              <Button Content="打开记录目录" Margin="8,0,0,0" Command="{Binding OpenRecordsCommand}"/>
+            </StackPanel>
+
+            <DataGrid ItemsSource="{Binding Records}" AutoGenerateColumns="False"
+                      IsReadOnly="True" CanUserSortColumns="True">
+              <DataGrid.Columns>
+                <DataGridTextColumn Header="文件" Binding="{Binding FileName}" Width="220"/>
+                <DataGridTextColumn Header="状态" Binding="{Binding Status}" Width="70"/>
+                <DataGridTextColumn Header="原体积(B)" Binding="{Binding OrigSize}" Width="110"/>
+                <DataGridTextColumn Header="新体积(B)" Binding="{Binding OutSize}" Width="110"/>
+                <DataGridTextColumn Header="比例" Binding="{Binding Ratio}" Width="60"/>
+                <DataGridTextColumn Header="成品位置" Binding="{Binding DestPath}" Width="220"/>
+                <DataGridTextColumn Header="留痕" Binding="{Binding Notes}" Width="240"/>
+                <DataGridTextColumn Header="失败原因" Binding="{Binding FailReason}" Width="*"/>
+              </DataGrid.Columns>
+            </DataGrid>
+          </DockPanel>
+        </TabItem>
+
+        <TabItem Header="设置">
+          <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel Margin="20" MaxWidth="600" HorizontalAlignment="Left">
+
+              <!-- 面板形态 -->
+              <Border Padding="12" CornerRadius="4"
+                      Background="{DynamicResource MaterialCardBackgroundBrush}">
+                <StackPanel>
+                  <CheckBox Content="启用高级调整（展开全部高级选项）"
+                            IsChecked="{Binding ShowAdvanced}"
+                            IsVisible="{Binding ShowAdvancedToggleVisible}"/>
+                  <CheckBox Margin="0,8,0,0" Content="自定义模式（逐项勾选隐藏，打造自己的面板）"
+                            IsChecked="{Binding CustomMode}"/>
+                  <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                    <Button Content="编辑显示项..." Command="{Binding EditVisibilityCommand}"/>
+                    <Button Content="恢复默认设置" Margin="10,0,0,0"
+                            Command="{Binding ResetDefaultsCommand}"/>
+                  </StackPanel>
+                  <TextBlock Classes="Hint"
+                             Text="隐藏只影响显示，不影响行为。"/>
+                </StackPanel>
+              </Border>
+
+              <!-- 输出 -->
+              <TextBlock Text="输出" Classes="GroupHead" IsVisible="{Binding GroupVis[输出]}"/>
+
+              <ComboBox Margin="0,6" ItemsSource="{Binding OutputLocations}" SelectedItem="{Binding OutputLocation}"
+                        IsVisible="{Binding Vis[output_location]}" IsEnabled="{Binding Enabled[output_location]}"
+                        PlaceholderText="输出位置（SourceDir 源目录 / FixedPath 指定路径 / AskEveryTime 每次询问）"/>
+
+              <ComboBox Margin="0,6" ItemsSource="{Binding SaveModes}" SelectedItem="{Binding SaveMode}"
+                        IsVisible="{Binding Vis[save_mode]}" IsEnabled="{Binding Enabled[save_mode]}"
+                        PlaceholderText="保存方式（NewFolder 新建文件夹 / DirectOverwrite 直接保存并覆盖同名）"/>
+
+              <TextBlock Classes="Hint"
+                         Text="新建文件夹：原文件不动。直接保存：同名文件会被覆盖。"/>
+
+              <Grid Margin="0,10,0,0" IsVisible="{Binding Vis[fixed_output_path]}">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBox Grid.Column="0" Text="{Binding FixedOutputPath, UpdateSourceTrigger=PropertyChanged}"
+                         IsEnabled="{Binding Enabled[fixed_output_path]}"
+                         Watermark="固定输出路径（仅 FixedPath 生效）"/>
+                <Button Grid.Column="1" Margin="8,0,0,0" Content="浏览..." Command="{Binding BrowseFixedCommand}"/>
+              </Grid>
+
+              <!-- 体积目标 -->
+              <TextBlock Text="体积目标" Classes="GroupHead" IsVisible="{Binding GroupVis[体积目标]}"/>
+
+              <ComboBox Margin="0,6" ItemsSource="{Binding SizeTargetModes}" SelectedItem="{Binding SizeTargetMode}"
+                        IsVisible="{Binding Vis[size_target_mode]}" IsEnabled="{Binding Enabled[size_target_mode]}"
+                        PlaceholderText="目标模式（Ratio 原体积百分比 / AbsoluteBytes 绝对大小）"/>
+
+              <TextBox Margin="0,6" Text="{Binding TargetRatioPercent, UpdateSourceTrigger=PropertyChanged}"
+                       IsVisible="{Binding Vis[target_ratio]}" IsEnabled="{Binding Enabled[target_ratio]}"
+                       Watermark="目标体积比例（%，仅 Ratio 模式）"/>
+
+              <TextBox Margin="0,6" Text="{Binding TargetMegabytes, UpdateSourceTrigger=PropertyChanged}"
+                       IsVisible="{Binding Vis[target_bytes]}" IsEnabled="{Binding Enabled[target_bytes]}"
+                       Watermark="目标体积（MB，每个文件；仅 AbsoluteBytes 模式）"/>
+
+              <!-- 画面 -->
+              <TextBlock Text="画面" Classes="GroupHead" IsVisible="{Binding GroupVis[画面]}"/>
+
+              <TextBox Margin="0,6" Text="{Binding TargetHeight, UpdateSourceTrigger=PropertyChanged}"
+                       IsVisible="{Binding Vis[target_height]}" IsEnabled="{Binding Enabled[target_height]}"
+                       Watermark="目标高度"/>
+
+              <ComboBox Margin="0,6" ItemsSource="{Binding ResizeModes}" SelectedItem="{Binding ResizeMode}"
+                        IsVisible="{Binding Vis[resize_mode]}" IsEnabled="{Binding Enabled[resize_mode]}"
+                        PlaceholderText="缩放方式（Scale 等比 / Stretch 强行拉伸到目标宽高）"/>
+
+              <TextBox Margin="0,6" Text="{Binding TargetWidth, UpdateSourceTrigger=PropertyChanged}"
+                       IsVisible="{Binding Vis[target_width]}" IsEnabled="{Binding Enabled[target_width]}"
+                       Watermark="目标宽度（仅 Stretch 模式生效）"/>
+
+              <!-- 筛选 -->
+              <TextBlock Text="筛选" Classes="GroupHead" IsVisible="{Binding GroupVis[筛选]}"/>
+
+              <TextBox Margin="0,6" Text="{Binding MinSizeMegabytes, UpdateSourceTrigger=PropertyChanged}"
+                       IsVisible="{Binding Vis[min_size_bytes]}" IsEnabled="{Binding Enabled[min_size_bytes]}"
+                       Watermark="体积起步线（MB，默认 256）"/>
+
+              <TextBox Margin="0,6" Text="{Binding MinSourceHeight, UpdateSourceTrigger=PropertyChanged}"
+                       IsVisible="{Binding Vis[min_source_height]}" IsEnabled="{Binding Enabled[min_source_height]}"
+                       Watermark="源高度下限（0 = 不筛）"/>
+
+              <CheckBox Margin="0,10,0,0" Content="启用源宽度下限（与高度同时限制）"
+                        IsChecked="{Binding EnableMinSourceWidth}"
+                        IsVisible="{Binding Vis[enable_min_source_width]}"
+                        IsEnabled="{Binding Enabled[enable_min_source_width]}"/>
+
+              <TextBox Margin="0,6" Text="{Binding MinSourceWidth, UpdateSourceTrigger=PropertyChanged}"
+                       IsVisible="{Binding Vis[min_source_width]}" IsEnabled="{Binding Enabled[min_source_width]}"
+                       Watermark="源宽度下限"/>
+
+              <CheckBox Margin="0,10,0,0" Content="递归扫描子目录" IsChecked="{Binding Recursive}"
+                        IsVisible="{Binding Vis[recursive]}" IsEnabled="{Binding Enabled[recursive]}"/>
+              <TextBlock Classes="Hint" IsVisible="{Binding Vis[recursive]}"
+                         Text="递归会把此前新建的输出文件夹一起扫进来；程序会识别并询问。"/>
+
+              <!-- 编码 -->
+              <TextBlock Text="编码" Classes="GroupHead" IsVisible="{Binding GroupVis[编码]}"/>
+
+              <ComboBox Margin="0,6" ItemsSource="{Binding Encoders}" SelectedItem="{Binding Encoder}"
+                        IsVisible="{Binding Vis[encoder]}" IsEnabled="{Binding Enabled[encoder]}"
+                        PlaceholderText="编码器"/>
+
+              <TextBlock Classes="Hint" IsVisible="{Binding Vis[encoder]}"
+                         Text="H264 常规档（默认 GPU 加速，体积精度较低）；X265 / SvtAv1 为压缩率而生（CPU、慢、体积精确）。"/>
+
+              <ComboBox Margin="0,10,0,0" ItemsSource="{Binding Av1Presets}"
+                        SelectedItem="{Binding SelectedAv1Preset}"
+                        IsVisible="{Binding Vis[preset_av1]}"
+                        IsEnabled="{Binding IsAv1}"
+                        PlaceholderText="SVT-AV1 preset（0-13，仅 SvtAv1 生效）">
+                <ComboBox.ItemTemplate>
+                  <DataTemplate>
+                    <TextBlock Text="{Binding Label}"/>
+                  </DataTemplate>
+                </ComboBox.ItemTemplate>
+              </ComboBox>
+
+              <ComboBox Margin="0,10,0,0" ItemsSource="{Binding X265Presets}"
+                        SelectedItem="{Binding SelectedX265Preset}"
+                        IsVisible="{Binding Vis[preset_x265]}"
+                        IsEnabled="{Binding IsX265}"
+                        PlaceholderText="x265 preset（仅 X265 生效）">
+                <ComboBox.ItemTemplate>
+                  <DataTemplate>
+                    <TextBlock Text="{Binding Label}"/>
+                  </DataTemplate>
+                </ComboBox.ItemTemplate>
+              </ComboBox>
+
+              <ComboBox Margin="0,10,0,0" ItemsSource="{Binding X264Presets}"
+                        SelectedItem="{Binding SelectedX264Preset}"
+                        IsVisible="{Binding Vis[preset_x264]}"
+                        IsEnabled="{Binding IsH264}"
+                        PlaceholderText="libx264 preset（仅 H264 且实现为 Cpu 时生效）">
+                <ComboBox.ItemTemplate>
+                  <DataTemplate>
+                    <TextBlock Text="{Binding Label}"/>
+                  </DataTemplate>
+                </ComboBox.ItemTemplate>
+              </ComboBox>
+
+              <ComboBox Margin="0,10,0,0" ItemsSource="{Binding H264Impls}" SelectedItem="{Binding H264Impl}"
+                        IsVisible="{Binding Vis[h264_impl]}" IsEnabled="{Binding Enabled[h264_impl]}"
+                        PlaceholderText="H.264 实现（Auto 自动探测；显式指定不可用者会报错而非静默降级）"/>
+
+              <CheckBox Margin="0,10,0,0" Content="GPU 解码卸载（只加速解码，压缩效率零损失）"
+                        IsChecked="{Binding GpuDecode}"
+                        IsVisible="{Binding Vis[gpu_decode]}" IsEnabled="{Binding Enabled[gpu_decode]}"/>
+
+              <!-- 音频与字幕 -->
+              <TextBlock Text="音频与字幕" Classes="GroupHead" IsVisible="{Binding GroupVis[音频与字幕]}"/>
+
+              <ComboBox Margin="0,6" ItemsSource="{Binding AudioPolicies}" SelectedItem="{Binding AudioPolicy}"
+                        IsVisible="{Binding Vis[audio_policy]}" IsEnabled="{Binding Enabled[audio_policy]}"
+                        PlaceholderText="音频策略"/>
+
+              <TextBlock Classes="Hint" IsVisible="{Binding Vis[audio_policy]}"
+                         Text="Auto：装得下就直拷，装不下的那几轨才重编码。CopyOnly：绝不重编码音频，装不下即判失败。"/>
+
+              <TextBox Margin="0,10,0,0" Text="{Binding AudioReencodeBitrateK, UpdateSourceTrigger=PropertyChanged}"
+                       IsVisible="{Binding Vis[audio_reencode_bitrate]}" IsEnabled="{Binding Enabled[audio_reencode_bitrate]}"
+                       Watermark="音频重编码码率（kbps，默认 192）"/>
+
+              <CheckBox Margin="0,10,0,0" Content="保留字幕流（装不下的逐条丢弃并记账）"
+                        IsChecked="{Binding KeepSubtitles}"
+                        IsVisible="{Binding Vis[keep_subtitles]}" IsEnabled="{Binding Enabled[keep_subtitles]}"/>
+
+              <!-- 验收 -->
+              <TextBlock Text="验收" Classes="GroupHead" IsVisible="{Binding GroupVis[验收]}"/>
+
+              <CheckBox Content="整片解码校验（推荐开启）" IsChecked="{Binding FullDecodeCheck}"
+                        IsVisible="{Binding Vis[full_decode_check]}" IsEnabled="{Binding Enabled[full_decode_check]}"/>
+
+              <TextBox Margin="0,10,0,0" Text="{Binding MaxOutRatioPercent, UpdateSourceTrigger=PropertyChanged}"
+                       IsVisible="{Binding Vis[max_out_ratio]}" IsEnabled="{Binding Enabled[max_out_ratio]}"
+                       Watermark="体积上界（%，实际取 max(此值, 目标比例x1.35)）"/>
+
+              <TextBox Margin="0,6" Text="{Binding MinOutRatioPercent, UpdateSourceTrigger=PropertyChanged}"
+                       IsVisible="{Binding Vis[min_out_ratio]}" IsEnabled="{Binding Enabled[min_out_ratio]}"
+                       Watermark="体积下界（%，0 = 关闭）"/>
+
+              <!-- 流程 -->
+              <TextBlock Text="流程" Classes="GroupHead" IsVisible="{Binding GroupVis[流程]}"/>
+
+              <TextBox Margin="0,6" Text="{Binding Parallelism, UpdateSourceTrigger=PropertyChanged}"
+                       IsVisible="{Binding Vis[parallelism]}" IsEnabled="{Binding Enabled[parallelism]}"
+                       Watermark="并行任务数（1-4）"/>
+
+              <CheckBox Margin="0,10,0,0" Content="重试此前失败的文件" IsChecked="{Binding RetryFailed}"
+                        IsVisible="{Binding Vis[retry_failed]}" IsEnabled="{Binding Enabled[retry_failed]}"/>
+
+              <TextBlock Margin="0,24,0,0" Classes="Hint"
+                         Text="成品须通过 ffprobe 交叉比对与整片解码校验才会落地；任何一项不过即判失败，源文件不动。详见 README。"/>
+            </StackPanel>
+          </ScrollViewer>
+        </TabItem>
+
+      </TabControl>
+    </material:Card>
+  </Grid>
+</Window>
