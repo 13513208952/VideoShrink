@@ -5,14 +5,15 @@ It bundles and/or depends on the following third-party components.
 
 ---
 
-## FFmpeg (`ffmpeg.exe`, `ffprobe.exe`)
+## FFmpeg (`ffmpeg`, `ffprobe`)
 
-VideoShrink ships prebuilt Windows binaries of FFmpeg and invokes them as separate processes.
+The Linux release ships prebuilt static FFmpeg binaries and invokes them as separate processes.
 
 - **Upstream:** <https://ffmpeg.org/> — source: <https://git.ffmpeg.org/ffmpeg.git>
 - **Prebuilt by:** [BtbN/FFmpeg-Builds](https://github.com/BtbN/FFmpeg-Builds)
-  (`ffmpeg-master-latest-win64-gpl.zip`)
-- **Version shipped:** `N-125505-gc57660fb18-20260708`
+  (`ffmpeg-master-latest-linux64-gpl.tar.xz`)
+- **Version shipped:** `N-125875-g5d4d3bdc61-20260731`
+- **SVT-AV1 version:** `4.1.0-279-gd3c4cb394`
 - **Licence:** **GPL v3** — this build is configured with `--enable-gpl --enable-version3`.
 
 > The build is **not** `--enable-nonfree`. Binaries produced with `--enable-nonfree` may not be
@@ -20,19 +21,19 @@ VideoShrink ships prebuilt Windows binaries of FFmpeg and invokes them as separa
 > `libfdk-aac` (`--disable-libfdk-aac`), which VideoShrink never needed.
 
 **Obtaining the source:** the exact sources for this binary are the FFmpeg git tree at commit
-`c57660fb18`, together with the build scripts published at
+`5d4d3bdc61`, together with the build scripts published at
 <https://github.com/BtbN/FFmpeg-Builds>. Both are publicly available at no charge.
 
 <details>
-<summary>Full <code>ffmpeg -buildconf</code> of the shipped binary</summary>
+<summary>Relevant <code>ffmpeg -buildconf</code> options of the shipped binary</summary>
 
 ```
 --prefix=/ffbuild/prefix --pkg-config-flags=--static --pkg-config=pkg-config
---cross-prefix=x86_64-w64-mingw32- --arch=x86_64 --target-os=mingw32
---enable-gpl --enable-version3 --disable-debug --disable-w32threads --enable-pthreads
---enable-iconv --enable-zlib --enable-libxml2 --enable-libvmaf --enable-fontconfig
+--cross-prefix=x86_64-ffbuild-linux-gnu- --arch=x86_64 --target-os=linux
+--enable-gpl --enable-version3 --disable-debug --enable-pthreads
+--enable-iconv --enable-zlib --enable-libxml2 --enable-openssl --enable-libvmaf --enable-fontconfig
 --enable-libharfbuzz --enable-libfreetype --enable-libfribidi --enable-vulkan
---enable-libshaderc --enable-libvorbis --disable-libxcb --disable-xlib --disable-libpulse
+--enable-libshaderc --enable-libvorbis --enable-libxcb --enable-xlib --enable-libpulse
 --enable-gmp --enable-lzma --enable-liblcevc-dec --enable-opencl --enable-amf --enable-libaom
 --enable-libaribb24 --enable-avisynth --enable-chromaprint --enable-libdav1d --enable-libdavs2
 --enable-libdvdread --enable-libdvdnav --disable-libfdk-aac --enable-ffnvcodec
@@ -41,13 +42,13 @@ VideoShrink ships prebuilt Windows binaries of FFmpeg and invokes them as separa
 --enable-libplacebo --enable-librist --enable-libssh --enable-libtheora --enable-libvpx
 --enable-libwebp --enable-libzmq --enable-lv2 --enable-libvpl --enable-openal --enable-liboapv
 --enable-libopencore-amrnb --enable-libopencore-amrwb --enable-libopenh264 --enable-libopenjpeg
---enable-libopenmpt --enable-librav1e --enable-librubberband --enable-schannel --enable-sdl2
+--enable-libopenmpt --enable-librav1e --enable-librubberband --disable-schannel --enable-sdl2
 --enable-libsnappy --enable-libsoxr --enable-libsrt --enable-libsvtav1 --enable-libtwolame
---enable-libuavs3d --disable-libdrm --enable-vaapi --enable-libvidstab --enable-libvvenc
+--enable-libuavs3d --enable-libdrm --enable-vaapi --enable-libvidstab --enable-libvvenc
 --disable-whisper --enable-libx264 --enable-libx265 --enable-libxavs2 --enable-libxvid
 --enable-libzimg --enable-libzvbi --extra-cflags=-DLIBTWOLAME_STATIC --extra-libs=-lgomp
---extra-ldflags=-pthread --cc=x86_64-w64-mingw32-gcc --cxx=x86_64-w64-mingw32-g++
---extra-version=20260708
+--extra-ldflags=-pthread --cc=x86_64-ffbuild-linux-gnu-gcc --cxx=x86_64-ffbuild-linux-gnu-g++
+--extra-version=20260731
 ```
 </details>
 

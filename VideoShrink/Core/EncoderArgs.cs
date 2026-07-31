@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Runtime.InteropServices;
 
 namespace VideoShrink.Core;
 
@@ -155,7 +156,12 @@ public static class EncoderArgs
     /// <summary>GPU 解码卸载：只加速解码，不碰编码，压缩效率零损失。缩放仍留在 CPU。</summary>
     private static void AddHwAccel(List<string> a, AppConfig cfg)
     {
-        if (cfg.GpuDecode) a.AddRange(new[] { "-hwaccel", "auto" });
+        // Linux `auto` can select llvmpipe Vulkan when no usable render node is
+        // available, then fail back to software decoding after expensive probing.
+        // Keep the proven Windows path until Linux gets explicit VAAPI device and
+        // filter-graph handling.
+        if (cfg.GpuDecode && RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            a.AddRange(new[] { "-hwaccel", "auto" });
     }
 
     // -- 第一趟：只为收集统计，输出丢进空设备 ----------------------------

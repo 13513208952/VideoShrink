@@ -1,6 +1,5 @@
 using System;
 using System.IO;
-using System.Runtime.InteropServices;
 
 namespace VideoShrink.Core;
 
@@ -24,7 +23,12 @@ public static class AppPaths
     {
         string exe = Path.Combine(ToolsDir, name + ".exe");
         if (File.Exists(exe)) return exe;
-        return Path.Combine(ToolsDir, name);
+        string bundled = Path.Combine(ToolsDir, name);
+        if (File.Exists(bundled)) return bundled;
+
+        // Source/development builds may use FFmpeg from PATH. Published builds
+        // bundle a pinned BtbN build in tools/ for reproducible performance.
+        return name;
     }
 
     public static void EnsureDirs()
@@ -46,5 +50,17 @@ public static class AppPaths
         catch { }
     }
 
-    public static bool ToolsPresent => File.Exists(FfmpegPath) && File.Exists(FfprobePath);
+    public static bool ToolsPresent => ToolExists(FfmpegPath) && ToolExists(FfprobePath);
+
+    private static bool ToolExists(string tool)
+    {
+        if (File.Exists(tool)) return true;
+        if (Path.IsPathRooted(tool)) return false;
+
+        string? path = Environment.GetEnvironmentVariable("PATH");
+        if (string.IsNullOrWhiteSpace(path)) return false;
+        foreach (string dir in path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+            if (File.Exists(Path.Combine(dir, tool))) return true;
+        return false;
+    }
 }

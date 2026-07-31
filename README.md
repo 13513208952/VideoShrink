@@ -99,14 +99,15 @@ this machine cannot run is a **hard error**, never a silent fallback. There is a
 
 ## Requirements
 
-- Windows 10/11, x64
-- `ffmpeg.exe` / `ffprobe.exe` in `tools/` — see [`VideoShrink/tools/README.md`](VideoShrink/tools/README.md)
+- Linux x64 with glibc 2.28 or newer
+- The release archive bundles pinned BtbN FFmpeg and ffprobe binaries. Source builds
+  may instead use `ffmpeg` and `ffprobe` from `PATH`.
 
 ## Building
 
 ```sh
 cd VideoShrink
-dotnet publish -c Release
+dotnet publish -c Release -r linux-x64 --self-contained
 ```
 
 ## How this was written
