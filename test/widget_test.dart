@@ -122,6 +122,8 @@ void main() {
     expect(find.text('自动跳过已处理文件'), findsOneWidget);
     expect(find.text('忽略本应用生成的文件'), findsOneWidget);
     expect(find.text('前台保持屏幕常亮'), findsOneWidget);
+    await tester.drag(find.byType(ListView).last, const Offset(0, -500));
+    await tester.pumpAndSettle();
     expect(find.text('已保存 12 条识别记录'), findsOneWidget);
     expect(find.textContaining('Root'), findsNothing);
   });

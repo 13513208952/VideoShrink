@@ -453,15 +453,17 @@ class TranscodeService : Service() {
         fun state(context: Context): Map<String, Any?> {
             val preferences = context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
             val batch = TaskStore.load(context)
+            val running = preferences.getBoolean(RUNNING_KEY, false)
+            val hasLegacyOnlyState = batch == null && !running
             return mapOf(
-                "serviceRunning" to preferences.getBoolean(RUNNING_KEY, false),
-                "taskStatus" to preferences.getString(STATUS_KEY, batch?.status ?: "idle"),
-                "taskCurrent" to preferences.getString(CURRENT_KEY, null),
-                "taskTotal" to preferences.getInt(TOTAL_KEY, batch?.files?.size ?: 0),
-                "taskCompleted" to preferences.getInt(COMPLETED_KEY, batch?.let { value -> value.files.count { it.status in setOf("completed", "failed", "skipped") } } ?: 0),
-                "taskProgress" to preferences.getInt(PROGRESS_KEY, batch?.progress ?: 0),
-                "taskError" to preferences.getString(ERROR_KEY, batch?.error),
-                "taskWarning" to preferences.getString(WARNING_KEY, batch?.warning),
+                "serviceRunning" to running,
+                "taskStatus" to if (hasLegacyOnlyState) "idle" else preferences.getString(STATUS_KEY, batch?.status ?: "idle"),
+                "taskCurrent" to if (hasLegacyOnlyState) null else preferences.getString(CURRENT_KEY, null),
+                "taskTotal" to if (hasLegacyOnlyState) 0 else preferences.getInt(TOTAL_KEY, batch?.files?.size ?: 0),
+                "taskCompleted" to if (hasLegacyOnlyState) 0 else preferences.getInt(COMPLETED_KEY, batch?.let { value -> value.files.count { it.status in setOf("completed", "failed", "skipped") } } ?: 0),
+                "taskProgress" to if (hasLegacyOnlyState) 0 else preferences.getInt(PROGRESS_KEY, batch?.progress ?: 0),
+                "taskError" to if (hasLegacyOnlyState) null else preferences.getString(ERROR_KEY, batch?.error),
+                "taskWarning" to if (hasLegacyOnlyState) null else preferences.getString(WARNING_KEY, batch?.warning),
                 "lastOutputUri" to preferences.getString(LAST_OUTPUT_KEY, null),
             ) + TaskStore.asMap(batch)
         }

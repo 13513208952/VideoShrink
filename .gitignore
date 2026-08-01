@@ -46,6 +46,7 @@ app.*.map.json
 
 # Native FFmpeg/SVT artifacts are built outside the source tree and linked in locally.
 /android/app/src/main/jniLibs/
+/android/.kotlin/
 
 # These paths are local symlinks in the development workspace.
 /.dart_tool

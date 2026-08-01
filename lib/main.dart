@@ -1024,7 +1024,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   Future<void> _pauseTask() => _taskCommand('pauseTask', '队列已暂停');
-  Future<void> _resumeTask() => _taskCommand('resumeTask', '队列继续处理');
+  Future<void> _resumeTask() async {
+    await _taskCommand('resumeTask', '队列继续处理');
+    if (!mounted) return;
+    pollTimer?.cancel();
+    pollTimer = Timer(const Duration(milliseconds: 500), _refreshPlatformState);
+  }
   Future<void> _cancelTask() => _taskCommand('cancelTask', '队列已终止，记录已保留');
   Future<void> _deleteTask() => _taskCommand('deleteTask', '任务记录已删除');
 
