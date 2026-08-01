@@ -104,7 +104,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   String? taskWarning;
   int taskTotal = 0;
   int taskCompleted = 0;
+  int taskDone = 0;
   int taskProgress = 0;
+  int taskFailed = 0;
+  int taskSkipped = 0;
+  int processedHistoryCount = 0;
+  String taskProfile = '';
+  List<Map<String, dynamic>> taskFiles = [];
+  bool skipProcessed = true;
+  bool skipGenerated = true;
+  bool strictMatching = true;
+  bool includeSubdirectories = true;
+  bool skipHidden = true;
+  bool keepScreenOn = true;
   Timer? pollTimer;
 
   @override
@@ -136,11 +148,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       children: [
         _buildCompressPage(wide: wide),
         _buildTaskPage(wide: wide),
-        const _EmptyPage(
-          icon: Icons.tune_rounded,
-          title: '偏好设置',
-          detail: '高级编码参数、扫描规则和安全校验将在这里配置。',
-        ),
+        _buildSettingsPage(wide: wide),
       ],
     );
     final overlay = SystemUiOverlayStyle(
@@ -500,32 +508,34 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               FilledButton.icon(
                 onPressed: busy
                     ? null
-                    : (serviceRunning ? _stopService : _startService),
+                    : (_hasBlockingTask
+                          ? () => setState(() => tab = 1)
+                          : _startService),
                 icon: busy
                     ? const SizedBox.square(
                         dimension: 20,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : Icon(
-                        serviceRunning
-                            ? Icons.stop_rounded
+                        _hasBlockingTask
+                            ? Icons.receipt_long_rounded
                             : Icons.play_arrow_rounded,
                       ),
-                label: Text(serviceRunning ? '停止后台任务' : '扫描并开始'),
+                label: Text(_hasBlockingTask ? '查看当前队列' : '扫描并开始'),
               ),
               const SizedBox(height: 12),
               const Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(
-                    Icons.lock_outline_rounded,
+                    Icons.playlist_play_rounded,
                     size: 15,
                     color: Colors.grey,
                   ),
                   SizedBox(width: 6),
                   Flexible(
                     child: Text(
-                      '不需要 Root · 锁屏后继续运行 · 原文件默认不改动',
+                      '单批次队列 · 锁屏后继续运行 · 原文件默认不改动',
                       textAlign: TextAlign.center,
                       style: TextStyle(fontSize: 12, color: Colors.grey),
                     ),
@@ -548,6 +558,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           'preparing',
           'encoding',
           'writing',
+          'paused',
+          'cancelling',
         }.contains(taskStatus);
     final statusText = switch (taskStatus) {
       'scanning' => '正在扫描视频',
@@ -555,6 +567,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       'preparing' => '正在复制并准备源视频',
       'encoding' => '正在压缩',
       'writing' => '正在校验并写入',
+      'paused' => '队列已暂停',
+      'cancelling' => '正在终止队列',
+      'cancelled' => '队列已终止，可继续处理',
+      'interrupted' => '队列被系统中断，可继续处理',
       'completed' => '全部完成',
       'completed_with_errors' => '处理完成，部分任务失败',
       'error' => '任务出错',
@@ -590,7 +606,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                       ),
                     ),
                   ),
-                  if (taskTotal > 0) Text('$taskCompleted / $taskTotal'),
+                  if (taskTotal > 0) Text('$taskDone / $taskTotal'),
                 ],
               ),
               if (taskCurrent != null) ...[
@@ -640,20 +656,215 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   ],
                 ),
               ],
+              if (taskProfile.isNotEmpty) ...[
+                const SizedBox(height: 14),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    Chip(label: Text(taskProfile)),
+                    Chip(label: Text('成功 $taskCompleted')),
+                    if (taskSkipped > 0) Chip(label: Text('跳过 $taskSkipped')),
+                    if (taskFailed > 0) Chip(label: Text('失败 $taskFailed')),
+                  ],
+                ),
+              ],
             ],
           ),
         ),
-        if (serviceRunning) ...[
+        if (taskStatus != 'idle') ...[
           const SizedBox(height: 18),
-          OutlinedButton.icon(
-            onPressed: busy ? null : _stopService,
-            icon: const Icon(Icons.stop_rounded),
-            label: const Text('停止当前批次'),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              if (active && taskStatus != 'paused' && taskStatus != 'scanning')
+                FilledButton.tonalIcon(
+                  onPressed: busy ? null : _pauseTask,
+                  icon: const Icon(Icons.pause_rounded),
+                  label: const Text('暂停'),
+                ),
+              if (taskStatus == 'paused' ||
+                  {'cancelled', 'interrupted', 'error'}.contains(taskStatus))
+                FilledButton.icon(
+                  onPressed: busy ? null : _resumeTask,
+                  icon: const Icon(Icons.play_arrow_rounded),
+                  label: const Text('继续'),
+                ),
+              if (active)
+                OutlinedButton.icon(
+                  onPressed: busy ? null : _cancelTask,
+                  icon: const Icon(Icons.stop_rounded),
+                  label: const Text('终止'),
+                ),
+              if (!active)
+                OutlinedButton.icon(
+                  onPressed: busy ? null : _deleteTask,
+                  icon: const Icon(Icons.delete_outline_rounded),
+                  label: const Text('删除记录'),
+                ),
+            ],
+          ),
+        ],
+        if (taskFiles.isNotEmpty) ...[
+          const _SectionTitle('批次文件'),
+          _SurfaceCard(
+            padding: EdgeInsets.zero,
+            child: ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: taskFiles.length,
+              separatorBuilder: (_, _) => const Divider(height: 1),
+              itemBuilder: (context, index) {
+                final file = taskFiles[index];
+                final status = file['status'] as String? ?? 'pending';
+                final error = file['error'] as String?;
+                return ListTile(
+                  leading: Icon(
+                    _fileStatusIcon(status),
+                    color: _fileStatusColor(status),
+                  ),
+                  title: Text(
+                    file['name'] as String? ?? '未知文件',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  subtitle: Text(
+                    error?.isNotEmpty == true
+                        ? error!
+                        : _fileStatusText(status),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  trailing: Text(
+                    _formatBytes(file['size'] as int? ?? 0),
+                    style: const TextStyle(fontSize: 11, color: Colors.grey),
+                  ),
+                );
+              },
+            ),
           ),
         ],
       ],
     );
   }
+
+  Widget _buildSettingsPage({required bool wide}) => ListView(
+    padding: _pageInsets(wide: wide, top: 28),
+    children: [
+      Text(
+        '偏好设置',
+        style: Theme.of(
+          context,
+        ).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w800),
+      ),
+      const _SectionTitle('扫描与识别'),
+      _SurfaceCard(
+        padding: EdgeInsets.zero,
+        child: Column(
+          children: [
+            SwitchListTile(
+              value: skipProcessed,
+              onChanged: (value) => _updateSetting('skipProcessed', value),
+              title: const Text('自动跳过已处理文件'),
+              subtitle: const Text('仅在当前编码与输出规则相同时跳过'),
+              secondary: const Icon(Icons.history_rounded),
+            ),
+            const Divider(height: 1),
+            SwitchListTile(
+              value: skipGenerated,
+              onChanged: (value) => _updateSetting('skipGenerated', value),
+              title: const Text('忽略本应用生成的文件'),
+              subtitle: const Text('防止输出文件在后续扫描中再次进入队列'),
+              secondary: const Icon(Icons.output_rounded),
+            ),
+            const Divider(height: 1),
+            SwitchListTile(
+              value: includeSubdirectories,
+              onChanged: (value) =>
+                  _updateSetting('includeSubdirectories', value),
+              title: const Text('扫描子文件夹'),
+              secondary: const Icon(Icons.account_tree_outlined),
+            ),
+            const Divider(height: 1),
+            SwitchListTile(
+              value: skipHidden,
+              onChanged: (value) => _updateSetting('skipHidden', value),
+              title: const Text('忽略隐藏文件和文件夹'),
+              secondary: const Icon(Icons.visibility_off_outlined),
+            ),
+          ],
+        ),
+      ),
+      const _SectionTitle('已处理文件匹配'),
+      SegmentedButton<bool>(
+        segments: const [
+          ButtonSegment(
+            value: true,
+            label: Text('严格'),
+            icon: Icon(Icons.verified_outlined),
+          ),
+          ButtonSegment(
+            value: false,
+            label: Text('兼容'),
+            icon: Icon(Icons.link_rounded),
+          ),
+        ],
+        selected: {strictMatching},
+        onSelectionChanged: (value) =>
+            _updateSetting('strictMatching', value.first),
+      ),
+      const SizedBox(height: 8),
+      Text(
+        strictMatching
+            ? '严格模式比较文件位置、大小和修改时间。'
+            : '兼容模式只比较文件位置和大小，适合修改时间不可靠的存储设备。',
+        style: const TextStyle(fontSize: 12, color: Colors.grey),
+      ),
+      const _SectionTitle('运行'),
+      _SurfaceCard(
+        padding: EdgeInsets.zero,
+        child: SwitchListTile(
+          value: keepScreenOn,
+          onChanged: (value) => _updateSetting('keepScreenOn', value),
+          title: const Text('前台保持屏幕常亮'),
+          subtitle: const Text('锁屏后后台任务仍由前台服务与唤醒锁维持'),
+          secondary: const Icon(Icons.light_mode_outlined),
+        ),
+      ),
+      const _SectionTitle('处理历史'),
+      _SurfaceCard(
+        child: Row(
+          children: [
+            const Icon(Icons.inventory_2_outlined),
+            const SizedBox(width: 14),
+            Expanded(child: Text('已保存 $processedHistoryCount 条识别记录')),
+            TextButton(
+              onPressed: processedHistoryCount == 0
+                  ? null
+                  : _clearProcessedHistory,
+              child: const Text('清空'),
+            ),
+          ],
+        ),
+      ),
+    ],
+  );
+
+  bool get _hasBlockingTask =>
+      serviceRunning ||
+      {
+        'scanning',
+        'queued',
+        'preparing',
+        'encoding',
+        'writing',
+        'paused',
+        'cancelling',
+        'cancelled',
+        'interrupted',
+        'error',
+      }.contains(taskStatus);
 
   Future<void> _refreshPlatformState() async {
     try {
@@ -686,8 +897,38 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         taskError = state['taskError'] as String?;
         taskWarning = state['taskWarning'] as String?;
         taskTotal = state['taskTotal'] as int? ?? 0;
-        taskCompleted = state['taskCompleted'] as int? ?? 0;
+        taskDone = state['taskCompleted'] as int? ?? 0;
         taskProgress = state['taskProgress'] as int? ?? 0;
+        processedHistoryCount = state['processedHistoryCount'] as int? ?? 0;
+        final settings = state['settings'];
+        if (settings is Map) {
+          skipProcessed = settings['skipProcessed'] != false;
+          skipGenerated = settings['skipGenerated'] != false;
+          strictMatching = settings['strictMatching'] != false;
+          includeSubdirectories = settings['includeSubdirectories'] != false;
+          skipHidden = settings['skipHidden'] != false;
+          keepScreenOn = settings['keepScreenOn'] != false;
+        }
+        final task = state['task'];
+        if (task is Map) {
+          taskCompleted = task['completed'] as int? ?? 0;
+          taskFailed = task['failed'] as int? ?? 0;
+          taskSkipped = task['skipped'] as int? ?? 0;
+          taskProfile = task['profile'] as String? ?? '';
+          final files = task['files'];
+          taskFiles = files is List
+              ? files
+                    .whereType<Map>()
+                    .map((file) => Map<String, dynamic>.from(file))
+                    .toList()
+              : [];
+        } else {
+          taskCompleted = 0;
+          taskFailed = 0;
+          taskSkipped = 0;
+          taskProfile = '';
+          taskFiles = [];
+        }
       });
       pollTimer?.cancel();
       if (serviceRunning) {
@@ -767,19 +1008,85 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _stopService() async {
+  Future<void> _taskCommand(String method, String successMessage) async {
     setState(() => busy = true);
     try {
-      await _platform.invokeMethod<void>('stopService');
+      await _platform.invokeMethod<void>(method);
       if (mounted) {
-        setState(() => serviceRunning = false);
-        _message('后台处理服务已停止');
+        _message(successMessage);
+        await _refreshPlatformState();
       }
     } on PlatformException catch (error) {
-      _message(error.message ?? '无法停止后台服务');
+      _message(error.message ?? '操作失败');
     } finally {
       if (mounted) setState(() => busy = false);
     }
+  }
+
+  Future<void> _pauseTask() => _taskCommand('pauseTask', '队列已暂停');
+  Future<void> _resumeTask() => _taskCommand('resumeTask', '队列继续处理');
+  Future<void> _cancelTask() => _taskCommand('cancelTask', '队列已终止，记录已保留');
+  Future<void> _deleteTask() => _taskCommand('deleteTask', '任务记录已删除');
+
+  Future<void> _updateSetting(String key, bool value) async {
+    try {
+      await _platform.invokeMethod<void>('updateSettings', {key: value});
+      if (!mounted) return;
+      setState(() {
+        if (key == 'skipProcessed') skipProcessed = value;
+        if (key == 'skipGenerated') skipGenerated = value;
+        if (key == 'strictMatching') strictMatching = value;
+        if (key == 'includeSubdirectories') includeSubdirectories = value;
+        if (key == 'skipHidden') skipHidden = value;
+        if (key == 'keepScreenOn') keepScreenOn = value;
+      });
+    } on PlatformException catch (error) {
+      _message(error.message ?? '无法保存设置');
+    }
+  }
+
+  Future<void> _clearProcessedHistory() async {
+    try {
+      await _platform.invokeMethod<void>('clearProcessedHistory');
+      if (mounted) setState(() => processedHistoryCount = 0);
+      _message('已清空处理历史；现有任务记录不会删除');
+    } on PlatformException catch (error) {
+      _message(error.message ?? '无法清空处理历史');
+    }
+  }
+
+  IconData _fileStatusIcon(String status) => switch (status) {
+    'completed' => Icons.check_circle_rounded,
+    'failed' => Icons.error_rounded,
+    'skipped' => Icons.fast_forward_rounded,
+    'preparing' || 'encoding' || 'writing' => Icons.sync_rounded,
+    _ => Icons.schedule_rounded,
+  };
+
+  Color _fileStatusColor(String status) => switch (status) {
+    'completed' => Colors.green,
+    'failed' => Theme.of(context).colorScheme.error,
+    'skipped' => Colors.blueGrey,
+    'preparing' ||
+    'encoding' ||
+    'writing' => Theme.of(context).colorScheme.primary,
+    _ => Colors.grey,
+  };
+
+  String _fileStatusText(String status) => switch (status) {
+    'completed' => '已完成',
+    'failed' => '处理失败',
+    'skipped' => '已按处理记录自动跳过',
+    'preparing' => '正在准备',
+    'encoding' => '正在编码 · $taskProgress%',
+    'writing' => '正在写入输出文件',
+    _ => '等待处理',
+  };
+
+  String _formatBytes(int bytes) {
+    if (bytes >= 1 << 30) return '${(bytes / (1 << 30)).toStringAsFixed(1)} GB';
+    if (bytes >= 1 << 20) return '${(bytes / (1 << 20)).toStringAsFixed(1)} MB';
+    return '${(bytes / (1 << 10)).toStringAsFixed(0)} KB';
   }
 
   void _message(String text) =>
@@ -1068,41 +1375,5 @@ class _SurfaceCard extends StatelessWidget {
   Widget build(BuildContext context) => Card(
     margin: EdgeInsets.zero,
     child: Padding(padding: padding, child: child),
-  );
-}
-
-class _EmptyPage extends StatelessWidget {
-  const _EmptyPage({
-    required this.icon,
-    required this.title,
-    required this.detail,
-  });
-  final IconData icon;
-  final String title;
-  final String detail;
-  @override
-  Widget build(BuildContext context) => SafeArea(
-    child: Center(
-      child: Padding(
-        padding: const EdgeInsets.all(36),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 58, color: Theme.of(context).colorScheme.primary),
-            const SizedBox(height: 18),
-            Text(
-              title,
-              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              detail,
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.grey),
-            ),
-          ],
-        ),
-      ),
-    ),
   );
 }

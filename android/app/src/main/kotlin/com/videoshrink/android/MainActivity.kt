@@ -27,7 +27,7 @@ class MainActivity : FlutterActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         configureEdgeToEdge()
         super.onCreate(savedInstanceState)
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        applyKeepScreenOn(AppSettingsStore.load(this).keepScreenOn)
     }
 
     @Suppress("DEPRECATION")
@@ -58,9 +58,22 @@ class MainActivity : FlutterActivity() {
                 "requestAllFilesAccess" -> openAllFilesAccessSettings(result)
                 "pickDirectory" -> pickDirectory(call, result)
                 "startService" -> startTranscodeService(call, result)
-                "stopService" -> {
-                    stopService(Intent(this, TranscodeService::class.java))
+                "pauseTask" -> {
+                    startService(Intent(this, TranscodeService::class.java).setAction(TranscodeService.ACTION_PAUSE))
                     result.success(null)
+                }
+                "resumeTask" -> {
+                    startForegroundService(Intent(this, TranscodeService::class.java).setAction(TranscodeService.ACTION_RESUME))
+                    result.success(null)
+                }
+                "cancelTask" -> {
+                    startService(Intent(this, TranscodeService::class.java).setAction(TranscodeService.ACTION_CANCEL))
+                    result.success(null)
+                }
+                "deleteTask" -> deleteTask(result)
+                "updateSettings" -> updateSettings(call, result)
+                "clearProcessedHistory" -> {
+                    result.success(ProcessingHistory.clear(this))
                 }
                 else -> result.notImplemented()
             }
@@ -69,6 +82,7 @@ class MainActivity : FlutterActivity() {
 
     private fun platformState(): Map<String, Any?> {
         val preferences = getSharedPreferences(PREFERENCES, MODE_PRIVATE)
+        val settings = AppSettingsStore.load(this)
         return mapOf(
             "hasAllFilesAccess" to hasAllFilesAccess(),
             "sourceUri" to preferences.getString("sourceUri", null),
@@ -76,7 +90,37 @@ class MainActivity : FlutterActivity() {
             "outputUri" to preferences.getString("outputUri", null),
             "outputName" to preferences.getString("outputName", null),
             "encoders" to encoderCapabilities(),
+            "settings" to AppSettingsStore.asMap(settings),
+            "processedHistoryCount" to ProcessingHistory.count(this),
         ) + TranscodeService.state(this)
+    }
+
+    private fun applyKeepScreenOn(enabled: Boolean) {
+        if (enabled) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+    }
+
+    private fun updateSettings(call: MethodCall, result: MethodChannel.Result) {
+        val values = call.arguments as? Map<*, *> ?: emptyMap<String, Any>()
+        val settings = AppSettingsStore.update(this, values)
+        applyKeepScreenOn(settings.keepScreenOn)
+        result.success(AppSettingsStore.asMap(settings))
+    }
+
+    private fun deleteTask(result: MethodChannel.Result) {
+        if (TranscodeService.isMarkedRunning(this)) {
+            result.error("queue_active", "运行中的队列不能删除，请先终止", null)
+            return
+        }
+        if (!TaskStore.delete(this)) {
+            result.error("delete_failed", "无法删除任务记录", null)
+            return
+        }
+        getSharedPreferences(PREFERENCES, MODE_PRIVATE).edit()
+            .remove("taskStatus").remove("taskCurrent").remove("taskTotal")
+            .remove("taskCompleted").remove("taskProgress").remove("taskError")
+            .remove("taskWarning").remove("lastOutputUri").apply()
+        result.success(null)
     }
 
     private fun encoderCapabilities(): Map<String, List<Map<String, Any>>> {
@@ -179,6 +223,15 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun startTranscodeService(call: MethodCall, result: MethodChannel.Result) {
+        val existing = TaskStore.load(this)
+        if (TranscodeService.isMarkedRunning(this) || existing?.status in TaskStore.activeStatuses) {
+            result.error("queue_active", "已有队列正在运行或暂停", null)
+            return
+        }
+        if (existing?.status in TaskStore.resumableStatuses) {
+            result.error("queue_pending", "已有可继续的队列，请先继续或删除它", null)
+            return
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) {
