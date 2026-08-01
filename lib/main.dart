@@ -3,7 +3,20 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-void main() => runApp(const VideoShrinkApp());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      systemNavigationBarColor: Colors.transparent,
+      systemNavigationBarDividerColor: Colors.transparent,
+      systemStatusBarContrastEnforced: false,
+      systemNavigationBarContrastEnforced: false,
+    ),
+  );
+  runApp(const VideoShrinkApp());
+}
 
 class VideoShrinkApp extends StatelessWidget {
   const VideoShrinkApp({super.key});
@@ -115,48 +128,118 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: SafeArea(
-        child: IndexedStack(
-          index: tab,
-          children: [
-            _buildCompressPage(),
-            _buildTaskPage(),
-            const _EmptyPage(
-              icon: Icons.tune_rounded,
-              title: '偏好设置',
-              detail: '高级编码参数、扫描规则和安全校验将在这里配置。',
-            ),
-          ],
+    final colors = Theme.of(context).colorScheme;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final wide = MediaQuery.sizeOf(context).width >= 720;
+    final pages = IndexedStack(
+      index: tab,
+      children: [
+        _buildCompressPage(wide: wide),
+        _buildTaskPage(wide: wide),
+        const _EmptyPage(
+          icon: Icons.tune_rounded,
+          title: '偏好设置',
+          detail: '高级编码参数、扫描规则和安全校验将在这里配置。',
         ),
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: tab,
-        onDestinationSelected: (value) => setState(() => tab = value),
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.compress_rounded),
-            label: '压缩',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.receipt_long_rounded),
-            label: '任务',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.settings_rounded),
-            label: '设置',
-          ),
-        ],
+      ],
+    );
+    final overlay = SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: dark ? Brightness.light : Brightness.dark,
+      statusBarBrightness: dark ? Brightness.dark : Brightness.light,
+      systemNavigationBarColor: Colors.transparent,
+      systemNavigationBarDividerColor: Colors.transparent,
+      systemNavigationBarIconBrightness: dark
+          ? Brightness.light
+          : Brightness.dark,
+      systemStatusBarContrastEnforced: false,
+      systemNavigationBarContrastEnforced: false,
+    );
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: overlay,
+      child: Scaffold(
+        extendBody: !wide,
+        body: wide
+            ? Row(
+                children: [
+                  SafeArea(
+                    right: false,
+                    child: NavigationRail(
+                      selectedIndex: tab,
+                      labelType: NavigationRailLabelType.all,
+                      onDestinationSelected: (value) =>
+                          setState(() => tab = value),
+                      destinations: const [
+                        NavigationRailDestination(
+                          icon: Icon(Icons.compress_rounded),
+                          label: Text('压缩'),
+                        ),
+                        NavigationRailDestination(
+                          icon: Icon(Icons.receipt_long_rounded),
+                          label: Text('任务'),
+                        ),
+                        NavigationRailDestination(
+                          icon: Icon(Icons.settings_rounded),
+                          label: Text('设置'),
+                        ),
+                      ],
+                    ),
+                  ),
+                  VerticalDivider(
+                    width: 1,
+                    thickness: 1,
+                    color: colors.outlineVariant,
+                  ),
+                  Expanded(child: pages),
+                ],
+              )
+            : pages,
+        bottomNavigationBar: wide
+            ? null
+            : NavigationBar(
+                backgroundColor: colors.surfaceContainer.withValues(
+                  alpha: 0.94,
+                ),
+                selectedIndex: tab,
+                onDestinationSelected: (value) => setState(() => tab = value),
+                destinations: const [
+                  NavigationDestination(
+                    icon: Icon(Icons.compress_rounded),
+                    label: '压缩',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.receipt_long_rounded),
+                    label: '任务',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.settings_rounded),
+                    label: '设置',
+                  ),
+                ],
+              ),
       ),
     );
   }
 
-  Widget _buildCompressPage() {
+  EdgeInsets _pageInsets({required bool wide, double top = 12}) {
+    final media = MediaQuery.of(context);
+    final safeWidth = media.size.width - media.viewPadding.horizontal;
+    final candidateSide = (safeWidth - 760) / 2;
+    final centeredSide = candidateSide > 20 ? candidateSide : 20.0;
+    return EdgeInsets.fromLTRB(
+      media.viewPadding.left + centeredSide,
+      media.viewPadding.top + top,
+      media.viewPadding.right + centeredSide,
+      media.viewPadding.bottom + (wide ? 36 : 132),
+    );
+  }
+
+  Widget _buildCompressPage({required bool wide}) {
     return CustomScrollView(
       physics: const BouncingScrollPhysics(),
       slivers: [
         SliverPadding(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+          padding: _pageInsets(wide: wide),
           sliver: SliverList.list(
             children: [
               const _Header(),
@@ -456,7 +539,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
-  Widget _buildTaskPage() {
+  Widget _buildTaskPage({required bool wide}) {
     final active =
         serviceRunning ||
         const {
@@ -478,7 +561,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       _ => '暂无任务',
     };
     return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 28, 20, 32),
+      padding: _pageInsets(wide: wide, top: 28),
       children: [
         Text(
           '任务队列',
@@ -998,25 +1081,27 @@ class _EmptyPage extends StatelessWidget {
   final String title;
   final String detail;
   @override
-  Widget build(BuildContext context) => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(36),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 58, color: Theme.of(context).colorScheme.primary),
-          const SizedBox(height: 18),
-          Text(
-            title,
-            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            detail,
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.grey),
-          ),
-        ],
+  Widget build(BuildContext context) => SafeArea(
+    child: Center(
+      child: Padding(
+        padding: const EdgeInsets.all(36),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 58, color: Theme.of(context).colorScheme.primary),
+            const SizedBox(height: 18),
+            Text(
+              title,
+              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              detail,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.grey),
+            ),
+          ],
+        ),
       ),
     ),
   );

@@ -12,6 +12,7 @@ VideoShrink 的 Android 移植版。应用使用 Flutter 构建界面，在 Andr
 - 目标体积 1%–100%，不根据设备能力限制选项
 - 新建 `VideoShrink` 输出目录或安全覆盖源文件
 - 前台媒体处理服务与 Partial WakeLock，锁屏后继续运行
+- Edge-to-edge 全面屏、挖孔/手势 Insets 与横屏侧边导航适配
 - 不需要 Root 或无障碍权限
 - Android 10+，当前发布包为 ARM64
 
