@@ -1,0 +1,43 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="VideoShrink.Views.VisibilityEditorDialog"
+        Title="编辑显示项 — 打造你自己的设置面板" Height="620" Width="640"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
+
+  <Grid Margin="20">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto"/>
+      <RowDefinition Height="*"/>
+      <RowDefinition Height="Auto"/>
+    </Grid.RowDefinitions>
+
+    <TextBlock Grid.Row="0" TextWrapping="Wrap" Opacity="0.75" Margin="0,0,0,12"
+               Text="勾选「隐藏」的项将不在设置页显示，但它们的当前取值仍然照常生效——隐藏只影响界面，不影响行为。关闭自定义模式即可恢复原来的显示方式。"/>
+
+    <Border Grid.Row="1" BorderThickness="1" CornerRadius="4"
+            BorderBrush="{DynamicResource MaterialDividerBrush}">
+      <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <ItemsControl x:Name="ItemsList" Margin="8">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate>
+              <Grid Margin="4,3">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="*"/>
+                  <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" VerticalAlignment="Center" Text="{Binding DisplayName}"/>
+                <CheckBox Grid.Column="1" Content="隐藏" IsChecked="{Binding Hidden}"/>
+              </Grid>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
+    </Border>
+
+    <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+      <Button Content="全部显示" Width="110" Click="ShowAll_Click"/>
+      <Button Content="取消" Width="110" Margin="12,0,0,0" Click="Cancel_Click"/>
+      <Button Content="保存并退出" Width="140" Margin="12,0,0,0" Click="Save_Click" Classes="accent"/>
+    </StackPanel>
+  </Grid>
+</Window>

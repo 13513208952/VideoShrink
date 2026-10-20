@@ -1,0 +1,17 @@
+# Build output
+bin/
+obj/
+.vs/
+release/
+*.user
+*.suo
+
+# Runtime data (created next to the executable)
+cache/
+records/
+settings.json
+
+# Bundled ffmpeg/ffprobe binaries are release assets, not source files.
+**/tools/*.exe
+VideoShrink/tools/ffmpeg
+VideoShrink/tools/ffprobe

@@ -1,0 +1,8 @@
+# Normalise line endings in the repository; check out native on Windows.
+* text=auto
+
+*.cs      text diff=csharp
+*.xaml    text
+*.csproj  text
+*.md      text
+*.gitignore text
