@@ -1,0 +1,20 @@
+VideoShrink is a multi-platform project. Different platforms are distributed under
+different licences:
+
+  windows/   GNU General Public License v3.0 (GPL-3.0)
+             Full text: windows/LICENSE
+
+  linux/     GNU General Public License v3.0 (GPL-3.0)
+             Full text: linux/LICENSE
+
+  android/   MIT License
+             Full text: android/LICENSE
+
+Bundled and linked third-party components are listed, with their licences, in:
+
+  windows/THIRD-PARTY-NOTICES.md
+  linux/THIRD-PARTY-NOTICES.md
+  android/THIRD_PARTY_NOTICES.md
+
+The Android native FFmpeg build is LGPL-2.1-or-later; its exact source archives are
+attached to the corresponding GitHub release.

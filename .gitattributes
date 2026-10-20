@@ -1,0 +1,6 @@
+* text=auto
+
+*.zip    binary
+*.apk    binary
+*.tar.gz binary
+*.so     binary
